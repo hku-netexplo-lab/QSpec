@@ -184,14 +184,14 @@ class QuarotLlamaAttention(LlamaAttention):
         query_states, key_states = self.rotary_emb(positions, query_states, key_states)
         
         # for spec-decode as draft model
-        # query_states = query_states.to(torch.bfloat16)
-        # key_states = key_states.to(torch.bfloat16)
-        # value_states = value_states.to(torch.bfloat16)
+        query_states = query_states.to(torch.bfloat16)
+        key_states = key_states.to(torch.bfloat16)
+        value_states = value_states.to(torch.bfloat16)
         # end———————————————————————————— 
         attn_output = self.attn(query_states, key_states, value_states, kv_cache, attn_metadata).view(-1, self.num_heads, self.head_dim)
 
         # for spec-decode as draft model
-        # attn_output = attn_output.to(torch.float16)
+        attn_output = attn_output.to(torch.float16)
         # end————————————————————————————
         
         # breakpoint()
