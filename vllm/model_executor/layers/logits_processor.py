@@ -88,9 +88,12 @@ class LogitsProcessor(nn.Module):
         embedding_bias: Optional[torch.Tensor],
     ) -> Optional[torch.Tensor]:
         # Get the logits for the next tokens.
-        logits = lm_head.linear_method.apply(lm_head,
-                                             hidden_states,
-                                             bias=embedding_bias)
+        if getattr(lm_head, "linear_method", None) is not None:
+            logits = lm_head.linear_method.apply(lm_head,
+                                                hidden_states,
+                                                bias=embedding_bias)
+        else:
+            logits = lm_head(hidden_states)
 
         if self.use_all_gather:
             # Gather is not supported for some devices such as TPUs.

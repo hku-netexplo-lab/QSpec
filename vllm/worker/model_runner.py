@@ -20,7 +20,7 @@ import vllm.envs as envs
 from vllm.attention import AttentionMetadata, get_attn_backend
 from vllm.attention.backends.abstract import AttentionState
 from vllm.attention.backends.utils import CommonAttentionState
-from vllm.config import CompilationLevel, VllmConfig
+from vllm.config import CompilationLevel, VllmConfig,set_current_vllm_config
 from vllm.core.scheduler import SchedulerOutputs
 from vllm.distributed import get_kv_transfer_group, get_pp_group
 from vllm.distributed.parallel_state import (get_tensor_model_parallel_rank,
@@ -1096,7 +1096,28 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
     def load_model(self) -> None:
         logger.info("Starting to load model %s...", self.model_config.model)
         with DeviceMemoryProfiler() as m:
-            self.model = get_model(vllm_config=self.vllm_config)
+            if "QuaRot" in self.model_config.model:
+                import transformers
+                with transformers.modeling_utils.no_init_weights(): 
+                    with set_current_vllm_config(self.vllm_config):
+                        from vllm.model_executor.models import quarot_llama
+                        torch.set_default_dtype(torch.float16)
+                        self.model = quarot_llama.QuarotLlamaForCausalLM(config=self.model_config.hf_config, vllm_config=self.vllm_config)
+                        from safetensors.torch import load_file
+                        weight_path = "/workspace/qspec/models/QuaRot/L3/model-00001-of-00002.safetensors"
+                        weight_path2 = "/workspace/qspec/models/QuaRot/L3/model-00002-of-00002.safetensors"
+                        state_dict = load_file(weight_path)
+                        state_dict2 = load_file(weight_path2)
+                        # merge the two state_dicts into one
+                        state_dict = {**state_dict, **state_dict2}
+                        # breakpoint()
+                        self.model.load_state_dict(state_dict)
+                        torch.set_default_dtype(torch.float16)
+                        self.model.cuda()    
+                        self.model.fuse_qkv()
+                    
+            else:
+                self.model = get_model(vllm_config=self.vllm_config)
 
         self.model_memory_usage = m.consumed_memory
         logger.info("Loading model weights took %.4f GB",

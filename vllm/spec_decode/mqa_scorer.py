@@ -106,7 +106,7 @@ class MQAScorer(SpeculativeScorer):
         if target_sampler_output.hidden_states is not None:
             hidden_states = target_sampler_output.hidden_states.reshape(
                 bs, (k + 1), -1)
-
+        # breakpoint()
         return SpeculativeScores(probs=all_probs,
                                  token_ids=all_tokens,
                                  logprobs=all_logprobs,

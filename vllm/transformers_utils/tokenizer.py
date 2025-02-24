@@ -182,6 +182,7 @@ def get_tokenizer(
                                                      revision=revision)
     else:
         try:
+            tokenizer_name = "/workspace/qspec/models/Meta-Llama-3-8B-Instruct"
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_name,
                 *args,
