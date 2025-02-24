@@ -14,7 +14,7 @@ class OnlineHadamard(torch.nn.Module):
         else:
             self.had_rem_dim = None       
     
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x_dtype = x.dtype
         if self.fp32_had:
             x = x.float()

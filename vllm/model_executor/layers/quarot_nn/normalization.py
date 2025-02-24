@@ -14,13 +14,19 @@ class RMSNorm(torch.nn.Module):
         self.mean_dim = mean_dim
         self.fuse=fuse
         self.bsz=1
-        if fuse:
-            self.forward = self.fuse_forward
-            self.out_q = torch.empty(self.bsz,4096//2, dtype=torch.int8, device="cuda")
-            self.scaling_factor = torch.empty(self.bsz, dtype=torch.float16, device="cuda")
-            self.input_sum = torch.empty(self.bsz, dtype=torch.float16, device="cuda")
+
+
+        self.out_q = torch.empty(self.bsz,4096//2, dtype=torch.int8, device="cuda")
+        self.scaling_factor = torch.empty(self.bsz, dtype=torch.float16, device="cuda")
+        self.input_sum = torch.empty(self.bsz, dtype=torch.float16, device="cuda")
+
+        
+        
+    def forward(self, x,  **kwargs):
+        if kwargs.get("w4a4",False):
+            return self.fuse_forward(x)
         else:
-            self.forward = self.unfuse_forward
+            return self.unfuse_forward(x)
         
 
     def fuse_forward(self, x: torch.Tensor) -> torch.Tensor:

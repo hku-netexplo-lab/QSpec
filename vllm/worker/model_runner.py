@@ -1102,7 +1102,14 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
                     with set_current_vllm_config(self.vllm_config):
                         from vllm.model_executor.models import quarot_llama
                         torch.set_default_dtype(torch.float16)
-                        self.model = quarot_llama.QuarotLlamaForCausalLM(config=self.model_config.hf_config, vllm_config=self.vllm_config)
+                        kwargs= {}
+                        # set w4a4
+                        # if self.is_driver_worker:
+                        #     kwargs["w4a4"] = False
+                        # else:
+                        kwargs["w4a4"] = True
+                        # breakpoint()
+                        self.model = quarot_llama.QuarotLlamaForCausalLM(config=self.model_config.hf_config, vllm_config=self.vllm_config,**kwargs)
                         from safetensors.torch import load_file
                         weight_path = "/workspace/qspec/models/QuaRot/L3/model-00001-of-00002.safetensors"
                         weight_path2 = "/workspace/qspec/models/QuaRot/L3/model-00002-of-00002.safetensors"
@@ -1671,6 +1678,7 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
         kv_caches: List[torch.Tensor],
         intermediate_tensors: Optional[IntermediateTensors] = None,
         num_steps: int = 1,
+        **kwargs,
     ) -> Optional[Union[List[SamplerOutput], IntermediateTensors]]:
         if num_steps > 1:
             raise ValueError("num_steps > 1 is not supported in ModelRunner")
@@ -1745,7 +1753,8 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
                     intermediate_tensors=intermediate_tensors,
                     **MultiModalKwargs.as_kwargs(multi_modal_kwargs,
                                                  device=self.device),
-                    **seqlen_agnostic_kwargs)
+                    **seqlen_agnostic_kwargs,
+                    **kwargs,)
 
         if (self.observability_config is not None
                 and self.observability_config.collect_model_forward_time):

@@ -382,7 +382,7 @@ class LocalOrDistributedWorkerBase(WorkerBase):
         """Executes at least one model step on the given sequences, unless no
         sequences are provided."""
         start_time = time.perf_counter()
-
+        # breakpoint()
         inputs = self.prepare_input(execute_model_req)
         if inputs is None:
             return None
@@ -406,7 +406,11 @@ class LocalOrDistributedWorkerBase(WorkerBase):
                     and self.observability_config.collect_model_execute_time):
                 orig_model_execute_time = intermediate_tensors.tensors.get(
                     "model_execute_time", torch.tensor(0)).item()
-
+        # breakpoint()
+        
+        kwargs["w4a4"] = execute_model_req.w4a4
+        
+        # breakpoint()
         output = self.model_runner.execute_model(
             model_input=model_input,
             kv_caches=self.kv_cache[worker_input.virtual_engine]

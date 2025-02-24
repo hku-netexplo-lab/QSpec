@@ -5,7 +5,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 import torch
 import torch.nn as nn
-
+from vllm.utils import (GiB_bytes, MemorySnapshot, bind_kv_cache,
+                        memory_profiling)
 from vllm.config import ParallelConfig, SpeculativeConfig, VllmConfig
 from vllm.distributed.communication_op import broadcast_tensor_dict
 from vllm.logger import init_logger
@@ -185,6 +186,10 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                             "EAGLE does not support TP > 1 yet")
 
                     allow_zero_draft_token_step = False
+                
+                # if draft_model_config.hf_config.model_type == "llama_quarot":
+                #     proposer_worker = QSpecWorker(**draft_worker_kwargs)
+                # else:
                 proposer_worker = MultiStepWorker(**draft_worker_kwargs)
 
             proposer_worker = SmallerTpProposerWorker.maybe_wrap_worker(
@@ -237,7 +242,8 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
             disable_log_stats=disable_log_stats,
             disable_by_batch_size=disable_by_batch_size,
             spec_decode_sampler=spec_decode_sampler,
-            allow_zero_draft_token_step=allow_zero_draft_token_step)
+            allow_zero_draft_token_step=allow_zero_draft_token_step,
+            draft_model_config=draft_model_config)
 
     def __init__(
         self,
@@ -250,6 +256,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         metrics_collector: Optional[AsyncMetricsCollector] = None,
         disable_by_batch_size: Optional[int] = None,
         allow_zero_draft_token_step: Optional[bool] = True,
+        draft_model_config=None,
     ):
         """
         Create a SpecDecodeWorker.
@@ -281,6 +288,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                 model generates no draft token; should disallow when the tp of
                 draft model is larger than 1 (TODO: #5814)
         """
+        self.draft_model_config = draft_model_config
         self.proposer_worker = proposer_worker
         self.scorer_worker = scorer_worker
         scorer_runner = getattr(self.scorer_worker, "model_runner", None)
@@ -324,6 +332,8 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         # NOTE(cade): load_model is not part of the WorkerBase interface.
         self.scorer_worker.load_model()
         self.proposer_worker.load_model()
+        
+        # breakpoint()
 
         self._metrics.init_tensors(self.rank, device_type=self.device)
         self.spec_decode_sampler.init_tensors(self.rank,
@@ -401,8 +411,21 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         """
         self.scorer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
                                             num_cpu_blocks=num_cpu_blocks)
-        self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
-                                              num_cpu_blocks=num_cpu_blocks)
+        
+        # origin ————————————————————————————————————
+        # self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
+        #                                       num_cpu_blocks=num_cpu_blocks)
+        # end of origin ————————————————————————————————————
+        self.proposer_worker.ref_initilize_cache(num_gpu_blocks=num_gpu_blocks,
+                                                 num_cpu_blocks=num_cpu_blocks,
+                                                 cache_engine = self.scorer_worker.cache_engine,
+                                                 gpu_cache = self.scorer_worker.gpu_cache,
+        )
+        
+   
+        # breakpoint()
+
+        
 
     def get_model(self) -> nn.Module:
         return self.scorer_worker.get_model()
@@ -619,6 +642,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         not called, meaning that the kv-cache in proposer for requests is not
         updated, so they cannot enable spec decode in the rest decoding.
         """
+        # breakpoint()
 
         sampler_output = self.scorer_worker.execute_model(execute_model_req)
         assert len(sampler_output) == 1
@@ -643,6 +667,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                 self.previous_hidden_states.update(
                     hidden_states, execute_model_req.seq_group_metadata_list)
 
+        skip_proposer = True
         if not skip_proposer:
             # We prepare the prefill hidden states here so that there no
             # additional complexity in worker for spec_decode vs non_spec_decode
@@ -726,6 +751,8 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         # breakpoint()
         with Timer() as proposal_timer:
             # Generate proposals using draft worker.
+            if self.draft_model_config.hf_config.model_type == "llama_quarot":
+                execute_model_req.w4a4 = True
             proposals = self.proposer_worker.get_spec_proposals(
                 execute_model_req, self._seq_with_bonus_token_in_last_step)
 
@@ -737,11 +764,12 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         execute_model_req.previous_hidden_states = None
 
         with Timer() as scoring_timer:
+            execute_model_req.w4a4 = False
             proposal_scores = self.scorer.score_proposals(
                 execute_model_req,
                 proposals,
             )
-
+        # breakpoint()
         _, (non_spec_seqs, non_spec_indices) = split_batch_by_proposal_len(
             execute_model_req.seq_group_metadata_list, proposals.proposal_lens)
         # With prefill chunking enabled, `non_spec_seqs` contains prefills too:

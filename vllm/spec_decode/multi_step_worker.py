@@ -75,6 +75,8 @@ class MultiStepWorker(ProposerWorkerBase, DelegateWorkerBase):
             self._expand_execute_model_request(
                 execute_model_req, seq_ids_with_bonus_token_in_last_step)
 
+        expanded_request.w4a4  = execute_model_req.w4a4
+        
         # Run model sample_len times.
         model_outputs: List[SamplerOutput] = []
         if current_platform.is_cuda_alike() and isinstance(
@@ -82,6 +84,7 @@ class MultiStepWorker(ProposerWorkerBase, DelegateWorkerBase):
         ) and self.model_runner.supports_gpu_multi_step(expanded_request):
             # Here we run the draft_model_runner with multi-step prepare
             # on the GPU directly
+            # breakpoint()
             expanded_request.num_steps = sample_len
             self.model_runner.set_indices_of_seq_with_bonus_tokens(
                 indices_of_seq_with_bonus_tokens)
@@ -94,6 +97,7 @@ class MultiStepWorker(ProposerWorkerBase, DelegateWorkerBase):
             # and other restrictions that are part of DraftModelRunner's
             # supports_gpu_multi_step(..)
             for _ in range(sample_len):
+                # breakpoint()
                 model_output: List[SamplerOutput] = self.worker.execute_model(
                     execute_model_req=expanded_request)
                 assert (len(model_output) == 1

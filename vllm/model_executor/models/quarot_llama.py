@@ -44,6 +44,12 @@ ALL_LAYERNORM_LAYERS.append(quarot_nn.RMSNorm)
 
 class QuarotLlamaConfig(LlamaConfig):
     model_type = "llama_quarot"
+    
+class QuaRotSequential(nn.Sequential):
+    def forward(self, input,**kwargs):
+        for module in self:
+            input = module(input,**kwargs)
+        return input
 
 class QuarotLlamaAttention(LlamaAttention):
     def __init__(self,
@@ -63,14 +69,14 @@ class QuarotLlamaAttention(LlamaAttention):
 
         super().__init__(config, layer_idx)
         # self.quantizer = quarot_nn.Quantizer()
-        self.q_proj = quarot_nn.Linear4bit.from_float(self.q_proj)
-        self.k_proj = quarot_nn.Linear4bit.from_float(self.k_proj)
-        self.v_proj = quarot_nn.Linear4bit.from_float(self.v_proj)
+        self.q_proj = quarot_nn.Linear4bit.from_float(self.q_proj,**kwargs)
+        self.k_proj = quarot_nn.Linear4bit.from_float(self.k_proj,**kwargs)
+        self.v_proj = quarot_nn.Linear4bit.from_float(self.v_proj,**kwargs)
         self.qkv_proj = None
         self.o_proj_hadamard = quarot_nn.OnlineHadamard(num_heads)
-        self.o_proj = torch.nn.Sequential(
-            quarot_nn.Quantizer(),
-            quarot_nn.Linear4bit.from_float(self.o_proj)
+        self.o_proj = QuaRotSequential(
+            quarot_nn.Quantizer(**kwargs),
+            quarot_nn.Linear4bit.from_float(self.o_proj,**kwargs)
         )
         self.num_heads = num_heads
         self.num_key_value_heads = num_kv_heads
@@ -127,7 +133,7 @@ class QuarotLlamaAttention(LlamaAttention):
         self.qkv_fused = True
         q_size = self.num_heads * self.head_dim
         kv_size = self.num_key_value_heads * self.head_dim
-        self.qkv_proj = quarot_nn.Linear4bit(self.q_proj.in_features,q_size+ 2*kv_size,bias=False)
+        self.qkv_proj = quarot_nn.Linear4bit(self.q_proj.in_features,q_size+ 2*kv_size,bias=False,w4a4=self.q_proj.w4a4)
         self.qkv_proj.weight.data[:q_size] = self.q_proj.weight.data
         self.qkv_proj.weight.data[q_size:q_size+kv_size] = self.k_proj.weight.data
         self.qkv_proj.weight.data[q_size+kv_size:] = self.v_proj.weight.data
@@ -157,7 +163,7 @@ class QuarotLlamaAttention(LlamaAttention):
         # hidden_states = self.quantizer(hidden_states)
         if self.qkv_fused:
             # TODO need to modify the code to adapt Llama3+
-            qkv_states = self.qkv_proj(hidden_states)
+            qkv_states = self.qkv_proj(hidden_states,**kwargs)
             q_len  = qkv_states.shape[0] // self.bsz
             bsz = self.bsz
             q_size = self.num_heads * self.head_dim
@@ -165,9 +171,9 @@ class QuarotLlamaAttention(LlamaAttention):
             query_states, key_states, value_states = qkv_states.split([q_size,kv_size,kv_size],dim=-1)
              
         else:    
-            query_states = self.q_proj(hidden_states)
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
+            query_states = self.q_proj(hidden_states,**kwargs)
+            key_states = self.k_proj(hidden_states,**kwargs)
+            value_states = self.v_proj(hidden_states,**kwargs)
             
             q_len  = query_states.shape[0] // self.bsz
             bsz = self.bsz
@@ -184,42 +190,46 @@ class QuarotLlamaAttention(LlamaAttention):
         query_states, key_states = self.rotary_emb(positions, query_states, key_states)
         
         # for spec-decode as draft model
-        query_states = query_states.to(torch.bfloat16)
-        key_states = key_states.to(torch.bfloat16)
-        value_states = value_states.to(torch.bfloat16)
+        # query_states = query_states.to(torch.bfloat16)
+        # key_states = key_states.to(torch.bfloat16)
+        # value_states = value_states.to(torch.bfloat16)
         # end———————————————————————————— 
         attn_output = self.attn(query_states, key_states, value_states, kv_cache, attn_metadata).view(-1, self.num_heads, self.head_dim)
 
         # for spec-decode as draft model
-        attn_output = attn_output.to(torch.float16)
+        # attn_output = attn_output.to(torch.float16)
         # end————————————————————————————
         
         # breakpoint()
         attn_output = self.o_proj_hadamard(attn_output.transpose(-1, -2)).transpose(-1, -2)
         # breakpoint()
         attn_output = attn_output.reshape(bsz * q_len, self.hidden_size).contiguous()
-        attn_output = self.o_proj(attn_output)
+        attn_output = self.o_proj(attn_output,**kwargs)
 
         return attn_output
 
 
 
 class QuarotLlamaMLP(LlamaMLP):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, config, **kwargs):
+        super().__init__(config=config)
         self.quantizer = quarot_nn.Quantizer()
-        self.up_proj = quarot_nn.Linear4bit.from_float(self.up_proj)
-        self.gate_proj = quarot_nn.Linear4bit.from_float(self.gate_proj)
-        self.down_proj = torch.nn.Sequential(
+        self.up_proj = quarot_nn.Linear4bit.from_float(self.up_proj,**kwargs)
+        self.gate_proj = quarot_nn.Linear4bit.from_float(self.gate_proj,**kwargs)
+        self.down_proj = QuaRotSequential(
             quarot_nn.OnlineHadamard(self.intermediate_size),
-            quarot_nn.Quantizer(),
-            quarot_nn.Linear4bit.from_float(self.down_proj)
+            quarot_nn.Quantizer(**kwargs),
+            quarot_nn.Linear4bit.from_float(self.down_proj,**kwargs)
         )
 
-    def forward(self, x):
-        # bsz, seq_len, _ = x.size()
-        # x = self.quantizer(x)
-        return super().forward(x) #.view(bsz, seq_len, -1)
+
+    def forward(self, x,**kwargs):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x,**kwargs)) * self.up_proj(x,**kwargs),**kwargs)
+        return down_proj
+    
+    
+    
+    
 
 
 class QuarotDecoderLayer(LlamaDecoderLayer):
@@ -227,6 +237,7 @@ class QuarotDecoderLayer(LlamaDecoderLayer):
                 cache_config: Optional[CacheConfig] = None,
                 quant_config: Optional[QuantizationConfig] = None,
                 prefix: str = "",
+                **kwargs
         ):
         super().__init__(config,layer_idx)
         self.hidden_size = config.hidden_size
@@ -255,12 +266,13 @@ class QuarotDecoderLayer(LlamaDecoderLayer):
                                             bias=attention_bias,
                                             bias_o_proj=False,
                                             cache_config=cache_config,
-                                            prefix=f"{prefix}.self_attn")
+                                            prefix=f"{prefix}.self_attn",
+                                            **kwargs)
         
-        self.mlp = QuarotLlamaMLP(config=config)
+        self.mlp = QuarotLlamaMLP(config=config,**kwargs)
         
-        self.input_layernorm = quarot_nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = quarot_nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = quarot_nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps,fuse = kwargs.get("w4a4", False))
+        self.post_attention_layernorm = quarot_nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, fuse = kwargs.get("w4a4", False))
         
         
         
@@ -276,21 +288,22 @@ class QuarotDecoderLayer(LlamaDecoderLayer):
 
         residual = hidden_states
         
-        hidden_states = self.input_layernorm(hidden_states)    
+        hidden_states = self.input_layernorm(hidden_states,**kwargs)    
             
         hidden_states = self.self_attn(positions=positions,
                                 hidden_states=hidden_states,
                                 kv_cache=kv_cache,
-                                attn_metadata=attn_metadata)
+                                attn_metadata=attn_metadata,
+                                **kwargs)
         
         hidden_states = residual + hidden_states.view_as(residual)
         # Fully Connected
         residual = hidden_states
         
-        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states,**kwargs)
         # breakpoint()
         
-        hidden_states = self.mlp(hidden_states).view_as(residual)
+        hidden_states = self.mlp(hidden_states,**kwargs).view_as(residual)
         hidden_states = residual + hidden_states
 
         outputs = hidden_states
@@ -306,7 +319,8 @@ class LlamaModel(nn.Module):
         config: LlamaConfig,
         vllm_config: VllmConfig,
         prefix: str = "",
-        layer_type: Type[QuarotDecoderLayer] = QuarotDecoderLayer):
+        layer_type: Type[QuarotDecoderLayer] = QuarotDecoderLayer,
+        **kwargs):
         
         super().__init__()
         self.config = config
@@ -333,7 +347,7 @@ class LlamaModel(nn.Module):
         self.org_vocab_size = config.vocab_size
         
         self.layers = nn.ModuleList(
-            [layer_type(config, i, cache_config, quant_config, prefix=f"{prefix}.layers.{i}")
+            [layer_type(config, i, cache_config, quant_config, prefix=f"{prefix}.layers.{i}",**kwargs)
              for i in range(config.num_hidden_layers)]
         )
         self.start_layer = 0
@@ -353,6 +367,7 @@ class LlamaModel(nn.Module):
         attn_metadata: AttentionMetadata,
         intermediate_tensors: Optional[IntermediateTensors],
         inputs_embeds: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> torch.Tensor:
         with torch.no_grad():
             if inputs_embeds is None:    # For VLM models
@@ -363,9 +378,10 @@ class LlamaModel(nn.Module):
             for i in range(self.start_layer, self.end_layer):
                 layer = self.layers[i]
                 #hidden_states, residual 
+                # breakpoint()
                 hidden_states= layer(positions, hidden_states,
                                                 kv_caches[i - self.start_layer],
-                                                attn_metadata)
+                                                attn_metadata,**kwargs)
             # need to connect hidden_states and residual
             hidden_states = self.norm(hidden_states)
                 
@@ -376,9 +392,9 @@ class LlamaModel(nn.Module):
 
 
 class QuarotFP16LlamaForCausalLM(LlamaForCausalLM):
-    def __init__(self, config, vllm_config: VllmConfig, prefix: str = ""):
+    def __init__(self, config, vllm_config: VllmConfig, prefix: str = "", **kwargs):
         super().__init__(config)
-        self.model = LlamaModel(config,vllm_config= vllm_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = LlamaModel(config,vllm_config= vllm_config, prefix=maybe_prefix(prefix, "model"),**kwargs)
         # assert config._attn_implementation == "flash_attention_2"
         # for layer_idx, layer in enumerate(self.model.layers):
         #     layer.self_attn = QuarotFP16LlamaAttention(config=config, layer_idx=layer_idx)
@@ -387,7 +403,8 @@ class QuarotFP16LlamaForCausalLM(LlamaForCausalLM):
         lora_config = vllm_config.lora_config
         self.lora_config = lora_config
         self._expected_max_length = None
-        self.model.norm =quarot_nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps,fuse=False)
+        self.w4a4 = kwargs.get("w4a4", False)
+        self.model.norm =quarot_nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         logit_scale = getattr(config, "logit_scale", 1.0)
         self.unpadded_vocab_size = config.vocab_size
         self.logits_processor = LogitsProcessor(self.unpadded_vocab_size,
@@ -426,11 +443,12 @@ class QuarotFP16LlamaForCausalLM(LlamaForCausalLM):
         attn_metadata: AttentionMetadata,
         intermediate_tensors: Optional[IntermediateTensors] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[torch.Tensor, IntermediateTensors]:
         # breakpoint()
         model_output = self.model(input_ids, positions, kv_caches,
                                   attn_metadata, intermediate_tensors,
-                                  inputs_embeds)
+                                  inputs_embeds,**kwargs)
         return model_output
     
     def compute_logits(
@@ -450,8 +468,9 @@ class QuarotFP16LlamaForCausalLM(LlamaForCausalLM):
 
 
 class QuarotLlamaForCausalLM(QuarotFP16LlamaForCausalLM):
-    def __init__(self, config, vllm_config: VllmConfig, prefix: str = ""):
-        super().__init__(config,vllm_config= vllm_config, prefix=prefix)
+    def __init__(self, config, vllm_config: VllmConfig, prefix: str = "", **kwargs):
+        print(f"W4A4{kwargs.get('w4a4', False)}")
+        super().__init__(config,vllm_config= vllm_config, prefix=prefix, **kwargs)
         # assert config._attn_implementation == "flash_attention_2"
         # used to have a rmsn
         # for layer_idx, layer in enumerate(self.model.layers):

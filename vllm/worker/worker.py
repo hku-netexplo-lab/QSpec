@@ -278,6 +278,29 @@ class Worker(LocalOrDistributedWorkerBase):
 
         self._init_cache_engine()
         self._warm_up_model()
+        
+        
+        
+    def ref_initilize_cache(self, num_gpu_blocks, num_cpu_blocks,cache_engine, gpu_cache):
+        raise_if_cache_size_invalid(num_gpu_blocks,
+                            self.cache_config.block_size,
+                            self.cache_config.is_attention_free,
+                            self.model_config.max_model_len)
+        
+        self.cache_config.num_gpu_blocks = num_gpu_blocks
+        self.cache_config.num_cpu_blocks = num_cpu_blocks
+        
+        
+        self.cache_engine = cache_engine
+        self.gpu_cache = gpu_cache
+        bind_kv_cache(self.compilation_config.static_forward_context,
+                      self.gpu_cache)
+        
+        
+        
+        self._warm_up_model()
+        
+
 
     def _init_cache_engine(self):
         assert self.cache_config.num_gpu_blocks is not None

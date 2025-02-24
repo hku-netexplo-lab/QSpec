@@ -173,6 +173,7 @@ class TP1DraftModelRunner(ModelRunnerWrapperBase):
         previous_hidden_states: Optional[torch.Tensor] = None,
         intermediate_tensors: Optional[IntermediateTensors] = None,
         num_steps: int = 1,
+        **kwargs,
     ) -> Optional[List[SamplerOutput]]:
         """Executes num_steps forward passes with advacement of input tensors 
         on the GPU. Look at supports_gpu_multi_step(..) for pre-conditions.
@@ -266,12 +267,14 @@ class TP1DraftModelRunner(ModelRunnerWrapperBase):
             hidden_states = previous_hidden_states
 
         outputs: List[SamplerOutput] = []
+        w4a4 = kwargs.get("w4a4", False)
         for step in range(num_steps):
             multi_modal_kwargs = model_input.multi_modal_kwargs or {}
 
             kwargs = {"previous_hidden_states": hidden_states} \
                 if previous_hidden_states is not None else {}
-
+            kwargs["w4a4"] = w4a4
+            # breakpoint()
             # Run model
             with set_forward_context(model_input.attn_metadata,
                                      self.vllm_config):

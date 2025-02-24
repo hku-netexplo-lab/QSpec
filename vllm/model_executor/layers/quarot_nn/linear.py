@@ -44,12 +44,17 @@ class Linear4bit(torch.nn.Module):
         self.bsz = 1
         self.output_buffer = torch.empty(self.bsz, self.out_features, dtype=torch.float16, device="cuda")
         self.w4a4 = w4a4
-        if w4a4:
-            self.forward = self.forward_w4a4 
-        else:
-            self.forward = self.forward_w4a16
+
             
+    
+    def forward(self,x,**kwargs):
+        if kwargs.get("w4a4",False):
+            return self.forward_w4a4(x)
+        else:
+            return self.forward_w4a16(x)    
         
+        
+    
     def forward_w4a4(self, x):
         #if torch.cuda.current_device() != x.device:
         #    torch.cuda.set_device(x.device)
@@ -92,7 +97,7 @@ class Linear4bit(torch.nn.Module):
         
 
     @staticmethod
-    def from_float(module: torch.nn.Linear, weight_scales=None,):
+    def from_float(module: torch.nn.Linear, weight_scales=None,**kwargs):
         '''
         Generate a new Linear4bit module from a FP16 Linear module.
         The weight matrix should have the same shape as the weight matrix of the FP16 Linear module and rounded using torch.round()
@@ -101,7 +106,7 @@ class Linear4bit(torch.nn.Module):
         weight_matrix = module.weight.data
         
         
-        int_module = Linear4bit(module.in_features, module.out_features, bias=module.bias is not None, dtype=weight_matrix.dtype).to(weight_matrix.dtype)
+        int_module = Linear4bit(module.in_features, module.out_features, bias=module.bias is not None, dtype=weight_matrix.dtype,w4a4 = kwargs.get("w4a4",False)).to(weight_matrix.dtype)
         if weight_scales is not None:
             assert weight_scales.shape == (module.out_features, 1), 'weight_scales should have shape (out_features, 1)'
             weight_matrix = weight_matrix.cuda()
