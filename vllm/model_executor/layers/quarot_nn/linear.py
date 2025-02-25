@@ -44,31 +44,34 @@ class Linear4bit(torch.nn.Module):
         self.bsz = 1
         self.output_buffer = torch.empty(self.bsz, self.out_features, dtype=torch.float16, device="cuda")
         self.w4a4 = w4a4
+        self.de_weight = None
 
             
     
-    def forward(self,x,**kwargs):
+    def forward(self,x,C=None,**kwargs):
         if kwargs.get("w4a4",False):
-            return self.forward_w4a4(x)
+            return self.forward_w4a4(x,C)
         else:
             return self.forward_w4a16(x)    
         
         
     
-    def forward_w4a4(self, x):
+    def forward_w4a4(self, x,C=None):
         #if torch.cuda.current_device() != x.device:
         #    torch.cuda.set_device(x.device)
         
         # TODO Improve the following code, move the shape handing to the init.
         assert type(x) == quarot.PackedQuantizedTensor #Quantized input is given
         x, scales_x = x.quantized_x, x.scales_x
-        
+        # print(x.shape)
         if self.weight_scales.dim() == 2:
             self.weight_scales = self.weight_scales.view(-1)
         if self.weight.dtype != torch.int8:
             self.weight = self.weight.to(torch.int8)
-            
-        C = torch.empty(x.shape[0], self.weight.shape[0], dtype=torch.float16, device="cuda")
+        
+        if C is None:
+            C = torch.empty(x.shape[0], self.weight.shape[0], dtype=torch.float16, device="cuda")
+        
         out = quarot.fuse_matmul(x, scales_x, self.weight, self.weight_scales, self.bias, C)
         return out
         #breakpoint()
@@ -81,14 +84,14 @@ class Linear4bit(torch.nn.Module):
         return out
 
     def forward_w4a16(self, x):
-        
-        if self.weight.shape[-1] != x.shape[-1]:
-            self.weight = unpack_i4(self.weight.to(torch.uint8)).to(torch.float16)
+        # print(f"forward_w4a16: {x.shape}")
+        if self.de_weight is None and self.weight.shape[-1] != x.shape[-1]:
+            self.de_weight = unpack_i4(self.weight.to(torch.uint8)).to(torch.float16)
         
         if x.dim() != 2:
             x = x.view(-1, self.in_features)
         
-        dequantized_weight = self.weight_scales.view(-1, 1) * self.weight 
+        dequantized_weight = self.weight_scales.view(-1, 1) * self.de_weight 
         out = x @ dequantized_weight.T
         return out
         

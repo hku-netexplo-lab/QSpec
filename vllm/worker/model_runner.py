@@ -1093,42 +1093,47 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
               SamplingMetadataCache() \
                 if self.parallel_config.pipeline_parallel_size == 1 else None
 
-    def load_model(self) -> None:
+    def load_model(self,model=None) -> None:
         logger.info("Starting to load model %s...", self.model_config.model)
-        with DeviceMemoryProfiler() as m:
-            if "QuaRot" in self.model_config.model:
-                import transformers
-                with transformers.modeling_utils.no_init_weights(): 
-                    with set_current_vllm_config(self.vllm_config):
-                        from vllm.model_executor.models import quarot_llama
-                        torch.set_default_dtype(torch.float16)
-                        kwargs= {}
-                        # set w4a4
-                        # if self.is_driver_worker:
-                        #     kwargs["w4a4"] = False
-                        # else:
-                        kwargs["w4a4"] = True
-                        # breakpoint()
-                        self.model = quarot_llama.QuarotLlamaForCausalLM(config=self.model_config.hf_config, vllm_config=self.vllm_config,**kwargs)
-                        from safetensors.torch import load_file
-                        weight_path = "/workspace/qspec/models/QuaRot/L3/model-00001-of-00002.safetensors"
-                        weight_path2 = "/workspace/qspec/models/QuaRot/L3/model-00002-of-00002.safetensors"
-                        state_dict = load_file(weight_path)
-                        state_dict2 = load_file(weight_path2)
-                        # merge the two state_dicts into one
-                        state_dict = {**state_dict, **state_dict2}
-                        # breakpoint()
-                        self.model.load_state_dict(state_dict)
-                        torch.set_default_dtype(torch.float16)
-                        self.model.cuda()    
-                        self.model.fuse_qkv()
-                    
-            else:
-                self.model = get_model(vllm_config=self.vllm_config)
+        
+        if model:
+            self.model = model
+        else:
+            with DeviceMemoryProfiler() as m:
+                if "QuaRot" in self.model_config.model:
+                    import transformers
+                    with transformers.modeling_utils.no_init_weights(): 
+                        with set_current_vllm_config(self.vllm_config):
+                            from vllm.model_executor.models import quarot_llama
+                            torch.set_default_dtype(torch.float16)
+                            kwargs= {}
+                            # set w4a4
+                            # if self.is_driver_worker:
+                            #     kwargs["w4a4"] = False
+                            # else:
+                            kwargs["w4a4"] = True
+                            # breakpoint()
+                            self.model = quarot_llama.QuarotLlamaForCausalLM(config=self.model_config.hf_config, vllm_config=self.vllm_config,**kwargs)
+                            from safetensors.torch import load_file
+                            weight_path = "/workspace/qspec/models/QuaRot/L3/model-00001-of-00002.safetensors"
+                            weight_path2 = "/workspace/qspec/models/QuaRot/L3/model-00002-of-00002.safetensors"
+                            state_dict = load_file(weight_path)
+                            state_dict2 = load_file(weight_path2)
+                            # merge the two state_dicts into one
+                            state_dict = {**state_dict, **state_dict2}
+                            state_dict = {k.replace("o_proj.1.", "o_proj.").replace("down_proj.0.", "online_hadamard.").replace("down_proj.2.", "down_proj.") : v for k, v in state_dict.items()}
+                            # breakpoint()
+                            self.model.load_state_dict(state_dict)
+                            torch.set_default_dtype(torch.float16)
+                            self.model.cuda()    
+                            self.model.fuse_qkv()
+                        
+                else:
+                    self.model = get_model(vllm_config=self.vllm_config)
 
-        self.model_memory_usage = m.consumed_memory
-        logger.info("Loading model weights took %.4f GB",
-                    self.model_memory_usage / float(2**30))
+            self.model_memory_usage = m.consumed_memory
+            logger.info("Loading model weights took %.4f GB",
+                        self.model_memory_usage / float(2**30))
 
         if self.lora_config:
             assert supports_lora(
@@ -1203,6 +1208,7 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
                 self.model,
                 fullgraph=envs.VLLM_TEST_DYNAMO_FULLGRAPH_CAPTURE,
                 backend=backend)
+        
 
     def get_model(self) -> nn.Module:
         return self.model
@@ -1745,6 +1751,11 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
         if not bypass_model_exec:
             with set_forward_context(model_input.attn_metadata,
                                      self.vllm_config, virtual_engine):
+                
+                if self.model_config.hf_config.model_type == 'llama_quarot':
+                    pass
+                
+                
                 hidden_or_intermediate_states = model_executable(
                     input_ids=model_input.input_tokens,
                     positions=model_input.input_positions,

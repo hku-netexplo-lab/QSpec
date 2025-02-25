@@ -331,8 +331,12 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
 
         # NOTE(cade): load_model is not part of the WorkerBase interface.
         self.scorer_worker.load_model()
-        self.proposer_worker.load_model()
-        
+        if self.draft_model_config.hf_config.model_type == "llama_quarot":
+            self.proposer_worker.load_model(self.scorer_worker.model_runner.model)
+            self.proposer_worker.model_runner.vllm_config.compilation_config.static_forward_context = self.scorer_worker.model_runner.vllm_config.compilation_config.static_forward_context
+        else:
+            self.proposer_worker.load_model()
+
         # breakpoint()
 
         self._metrics.init_tensors(self.rank, device_type=self.device)
@@ -519,6 +523,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         if no_spec:
             return self._run_no_spec(execute_model_req,
                                      skip_proposer=disable_all_speculation)
+            
         return self._run_speculative_decoding_step(execute_model_req,
                                                    num_lookahead_slots)
 
@@ -753,6 +758,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
             # Generate proposals using draft worker.
             if self.draft_model_config.hf_config.model_type == "llama_quarot":
                 execute_model_req.w4a4 = True
+                # breakpoint()
             proposals = self.proposer_worker.get_spec_proposals(
                 execute_model_req, self._seq_with_bonus_token_in_last_step)
 

@@ -74,10 +74,12 @@ class QuarotLlamaAttention(LlamaAttention):
         self.v_proj = quarot_nn.Linear4bit.from_float(self.v_proj,**kwargs)
         self.qkv_proj = None
         self.o_proj_hadamard = quarot_nn.OnlineHadamard(num_heads)
-        self.o_proj = QuaRotSequential(
-            quarot_nn.Quantizer(**kwargs),
-            quarot_nn.Linear4bit.from_float(self.o_proj,**kwargs)
-        )
+        self.quantizer = quarot_nn.Quantizer(**kwargs)
+        self.o_proj = quarot_nn.Linear4bit.from_float(self.o_proj,**kwargs)
+        # self.o_proj = QuaRotSequential(
+        #     quarot_nn.Quantizer(**kwargs),
+        #     quarot_nn.Linear4bit.from_float(self.o_proj,**kwargs)
+        # )
         self.num_heads = num_heads
         self.num_key_value_heads = num_kv_heads
         self.head_dim = config.hidden_size // num_heads
@@ -162,8 +164,9 @@ class QuarotLlamaAttention(LlamaAttention):
 
         # hidden_states = self.quantizer(hidden_states)
         if self.qkv_fused:
-            # TODO need to modify the code to adapt Llama3+
-            qkv_states = self.qkv_proj(hidden_states,**kwargs)
+           
+            act_buffer_qkv = kwargs.get("act_buffer_qkv",None)
+            qkv_states = self.qkv_proj(hidden_states,act_buffer_qkv,**kwargs)
             q_len  = qkv_states.shape[0] // self.bsz
             bsz = self.bsz
             q_size = self.num_heads * self.head_dim
@@ -204,7 +207,15 @@ class QuarotLlamaAttention(LlamaAttention):
         attn_output = self.o_proj_hadamard(attn_output.transpose(-1, -2)).transpose(-1, -2)
         # breakpoint()
         attn_output = attn_output.reshape(bsz * q_len, self.hidden_size).contiguous()
-        attn_output = self.o_proj(attn_output,**kwargs)
+        
+        quantized_buffer_qkv = kwargs.get("quantized_buffer_qkv",None)
+        scale_buffer = kwargs.get("scale_buffer",None)
+        # if kwargs.get("w4a4",False):
+        #     # breakpoint()
+        quantized_attn_output = self.quantizer(attn_output, scale_buffer,quantized_buffer_qkv,**kwargs)
+        
+        act_buffer_output = kwargs.get("act_buffer_output",None)
+        attn_output = self.o_proj(quantized_attn_output,act_buffer_output,**kwargs)
 
         return attn_output
 
@@ -216,14 +227,43 @@ class QuarotLlamaMLP(LlamaMLP):
         self.quantizer = quarot_nn.Quantizer()
         self.up_proj = quarot_nn.Linear4bit.from_float(self.up_proj,**kwargs)
         self.gate_proj = quarot_nn.Linear4bit.from_float(self.gate_proj,**kwargs)
-        self.down_proj = QuaRotSequential(
-            quarot_nn.OnlineHadamard(self.intermediate_size),
-            quarot_nn.Quantizer(**kwargs),
-            quarot_nn.Linear4bit.from_float(self.down_proj,**kwargs)
-        )
+        self.online_hadamard = quarot_nn.OnlineHadamard(self.intermediate_size)
+        self.down_proj = quarot_nn.Linear4bit.from_float(self.down_proj,**kwargs)
+        
+        # self.down_proj = QuaRotSequential(
+        #     quarot_nn.OnlineHadamard(self.intermediate_size),
+        #     quarot_nn.Quantizer(**kwargs),
+        #     quarot_nn.Linear4bit.from_float(self.down_proj,**kwargs)
+        # )
 
 
     def forward(self, x,**kwargs):
+        
+        # gate_proj
+        act_buffer_gate = kwargs.get("act_buffer_gate",None)
+        gate = self.gate_proj(x,act_buffer_gate,**kwargs)
+        
+        # up_proj
+        act_buffer_up = kwargs.get("act_buffer_up",None)
+        up_proj = self.up_proj(x,act_buffer_up,**kwargs)
+        
+        # Silu activation
+        gate_up = self.act_fn(gate) * up_proj
+        
+        # hadamard
+        gate_up = self.online_hadamard(gate_up)
+        
+        # quantisation
+        quantized_buffer_mlp = kwargs.get("quantized_buffer_mlp",None)
+        scale_buffer = kwargs.get("scale_buffer",None)
+        quantized_gate_up = self.quantizer(gate_up,scale_buffer,quantized_buffer_mlp,**kwargs)
+        
+        # down_proj
+        act_buffer_output = kwargs.get("act_buffer_output",None)
+        down_proj = self.down_proj(quantized_gate_up,act_buffer_output,**kwargs)
+        return down_proj
+        
+        
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x,**kwargs)) * self.up_proj(x,**kwargs),**kwargs)
         return down_proj
     

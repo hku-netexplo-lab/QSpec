@@ -16,20 +16,19 @@ class RMSNorm(torch.nn.Module):
         self.bsz=1
 
 
-        self.out_q = torch.empty(self.bsz,4096//2, dtype=torch.int8, device="cuda")
-        self.scaling_factor = torch.empty(self.bsz, dtype=torch.float16, device="cuda")
-        self.input_sum = torch.empty(self.bsz, dtype=torch.float16, device="cuda")
-
         
         
     def forward(self, x,  **kwargs):
         if kwargs.get("w4a4",False):
-            return self.fuse_forward(x)
+            out_q = kwargs.get("quantized_buffer_qkv",None)
+            scales = kwargs.get("scale_buffer",None)
+            input_sum = kwargs.get("input_sum_buffer",None)
+            return self.fuse_forward(x, out_q, scales, input_sum)
         else:
             return self.unfuse_forward(x)
         
 
-    def fuse_forward(self, x: torch.Tensor) -> torch.Tensor:
+    def fuse_forward(self, x: torch.Tensor,out_q = None, scaling_factor=None, input_sum=None) -> torch.Tensor:
         # input_dtype = x.dtype
         # if x.dtype == torch.float16:
         #     x = x.to(torch.float32)
@@ -38,20 +37,19 @@ class RMSNorm(torch.nn.Module):
         # return x.to(input_dtype)
 
         # breakpoint()
-        if x.shape[1] > 1:
-            if x.dim() == 2:
-                batched_length,hidden_size = x.size()
-            else:
-                bsz, length, hidden_size = x.size()
-                batched_length = bsz * length
+
+        if x.dim() == 2:
+            batched_length,hidden_size = x.size()
+        else:
+            bsz, length, hidden_size = x.size()
+            batched_length = bsz * length
+            
+        if out_q is None or input_sum is None or scaling_factor is None:
             out_q = torch.zeros(batched_length, hidden_size //2 , dtype=torch.int8, device="cuda")
             scaling_factor_and_input_sum = torch.zeros(2,batched_length, dtype=torch.float16, device="cuda")
             input_sum = scaling_factor_and_input_sum[0]
             scaling_factor = scaling_factor_and_input_sum[1]
-        else:
-            out_q = self.out_q
-            input_sum = self.input_sum
-            scaling_factor = self.scaling_factor
+                
         layernorm_ops.rms_norm_general_fuse_sum_i4(
             out_q,
             x,

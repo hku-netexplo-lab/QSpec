@@ -273,7 +273,10 @@ def unified_attention_with_output(
 ) -> None:
     forward_context: ForwardContext = get_forward_context()
     attn_metadata = forward_context.attn_metadata
-    self = forward_context.attn_layers[layer_name]
+    try:
+        self = forward_context.attn_layers[layer_name]
+    except KeyError:
+        breakpoint()
     kv_cache = self.kv_cache[forward_context.virtual_engine]
     self.impl.forward(self,
                       query,
