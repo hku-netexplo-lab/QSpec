@@ -216,8 +216,9 @@ class QuarotLlamaAttention(LlamaAttention):
         # if kwargs.get("w4a4",False):
         
         act_buffer_had = kwargs.get("act_buffer_had",None)
-        act_buffer_had = None
-        attn_output = self.o_proj_hadamard(attn_output.transpose(-1, -2).reshape(-1,self.num_heads) , act_buffer_had ).view(-1, self.head_dim, self.num_heads).transpose(-1, -2)
+        # act_buffer_had = None
+        attn_output = self.o_proj_hadamard(attn_output.transpose(-1, -2).reshape(-1,self.num_heads) , act_buffer_had )\
+            .view(-1, self.head_dim, self.num_heads).transpose(-1, -2)
         
         
         attn_output = attn_output.reshape(bsz * q_len, self.hidden_size).contiguous()
@@ -265,8 +266,8 @@ class QuarotLlamaMLP(LlamaMLP):
         
         # hadamard
         act_buffer_had_mlp = kwargs.get("act_buffer_had_mlp",None)
-        act_buffer_had_mlp = None
-        gate_up = self.online_hadamard(gate_up,act_buffer_had_mlp)
+        # act_buffer_had_mlp = None
+        gate_up = self.online_hadamard(gate_up,act_buffer_had_mlp).view(-1,self.intermediate_size)
         
         # quantisation
         quantized_buffer_mlp = kwargs.get("quantized_buffer_mlp",None)
