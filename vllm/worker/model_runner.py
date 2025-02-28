@@ -1752,8 +1752,57 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
             with set_forward_context(model_input.attn_metadata,
                                      self.vllm_config, virtual_engine):
                 
-                if self.model_config.hf_config.model_type == 'llama_quarot':
-                    pass
+                if self.model_config.hf_config.model_type != 'llama_quarot':
+                    kwargs.pop("w4a4", None)
+                # else:
+                #     kwargs["w4a4"] = True
+                #     seq_len = model_input.input_tokens.shape[0]
+                #     num_heads = self.model_config.hf_config.num_attention_heads
+                #     num_kv_heads = self.model_config.hf_config.num_key_value_heads
+                #     intermediate_size = self.model_config.hf_config.intermediate_size
+                #     hidden_size = self.model_config.hf_config.hidden_size
+                #     head_dim = hidden_size // num_heads
+                #     q_size = head_dim * num_heads
+                #     kv_size = head_dim * num_kv_heads
+                #     quantized_buffer_qkv = torch.empty((
+                #         seq_len,hidden_size//2),dtype=torch.int8,device=self.device)
+                #     quantized_buffer_mlp = torch.empty((
+                #         seq_len,intermediate_size//2),dtype=torch.int8,device=self.device)
+                #     act_buffer_qkv = torch.empty((
+                #         seq_len,q_size + 2*kv_size),dtype=torch.float16,device=self.device)
+                #     act_buffer_output = torch.empty((
+                #         seq_len,hidden_size),dtype=torch.float16,device=self.device)
+                #     act_buffer_attn = torch.empty((
+                #         seq_len,num_heads,head_dim),dtype=torch.float16,device=self.device)
+                #     act_buffer_had = torch.empty((
+                #         seq_len*hidden_size//num_heads, num_heads),dtype=torch.float16,device=self.device)
+                #     act_buffer_had_mlp = torch.empty((
+                #         seq_len*intermediate_size // 512, 512),dtype=torch.float16,device=self.device)
+                #     act_buffer_gate = torch.empty((
+                #         seq_len,intermediate_size),dtype=torch.float16,device=self.device)
+                #     act_buffer_up = torch.empty((
+                #         seq_len,intermediate_size),dtype=torch.float16,device=self.device)
+                #     scale_buffer = torch.empty((
+                #         seq_len),dtype=torch.float16,device=self.device)
+                #     input_sum_buffer = torch.empty((
+                #         seq_len),dtype=torch.float16,device=self.device)
+                    
+                #     kwargs["quantized_buffer_qkv"] = quantized_buffer_qkv
+                #     kwargs["quantized_buffer_mlp"] = quantized_buffer_mlp
+                #     kwargs["act_buffer_qkv"] = act_buffer_qkv
+                #     kwargs["act_buffer_output"] = act_buffer_output
+                #     kwargs["act_buffer_gate"] = act_buffer_gate
+                #     kwargs["act_buffer_up"] = act_buffer_up
+                #     kwargs["scale_buffer"] = scale_buffer
+                #     kwargs["input_sum_buffer"] = input_sum_buffer
+                #     kwargs["act_buffer_had"] = act_buffer_had
+                #     kwargs["act_buffer_had_mlp"] = act_buffer_had_mlp   
+                #     kwargs["act_buffer_attn"] = act_buffer_attn
+                #     # breakpoint()
+                #     model_input.attn_metadata.qspec = False
+                        
+                    
+                    
                 
                 
                 hidden_or_intermediate_states = model_executable(

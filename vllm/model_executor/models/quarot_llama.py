@@ -14,6 +14,7 @@ from vllm.model_executor.layers import quarot_nn
 
 from vllm.config import VllmConfig,CacheConfig
 from vllm.model_executor.layers.quantization import QuantizationConfig
+from vllm.model_executor.layers.rotary_embedding import ERotaryEmbedding
 from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.platforms import current_platform
 from vllm.sequence import IntermediateTensors
@@ -94,14 +95,24 @@ class QuarotLlamaAttention(LlamaAttention):
         self.hidden_size = config.hidden_size
         self.is_neox_style = True
         self.bsz = 1
-        self.rotary_emb = get_rope(
+        self.rotary_emb = ERotaryEmbedding(
             self.head_dim,
             rotary_dim=self.head_dim,
-            max_position=self.max_position_embeddings,
+            max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
-            rope_scaling=self.rope_scaling,
             is_neox_style=self.is_neox_style,
+            dtype = torch.get_default_dtype()
         )
+        
+        # get_rope(
+        #     self.head_dim,
+        #     rotary_dim=self.head_dim,
+        #     max_position=self.max_position_embeddings,
+        #     base=self.rope_theta,
+        #     rope_scaling=self.rope_scaling,
+        #     is_neox_style=self.is_neox_style,
+        # )
+       
         if hasattr(self.config, "interleaved_sliding_window"):
             interleaved_sliding_window = self.config.interleaved_sliding_window
             if isinstance(interleaved_sliding_window, int):
@@ -188,24 +199,27 @@ class QuarotLlamaAttention(LlamaAttention):
         # key_states = key_states.reshape(q_len, self.num_key_value_heads, self.head_dim).contiguous()  ##.transpose(1, 2)
         # value_states = value_states.reshape(q_len, self.num_key_value_heads, self.head_dim).contiguous()  ##.transpose(1, 2)
 
-        # breakpoint()
+        query_states, key_states = self.rotary_emb.forward_cuda(positions, query_states, key_states)
 
-        query_states, key_states = self.rotary_emb(positions, query_states, key_states)
-        
         # for spec-decode as draft model
         # query_states = query_states.to(torch.bfloat16)
         # key_states = key_states.to(torch.bfloat16)
         # value_states = value_states.to(torch.bfloat16)
         # end———————————————————————————— 
-        attn_output = self.attn(query_states, key_states, value_states, kv_cache, attn_metadata).view(-1, self.num_heads, self.head_dim)
+        act_buffer_attn = kwargs.get("act_buffer_attn",None)
+        attn_output = self.attn(query_states, key_states, value_states, kv_cache, attn_metadata,act_buffer_attn).view(-1, self.num_heads, self.head_dim)
 
         # for spec-decode as draft model
         # attn_output = attn_output.to(torch.float16)
         # end————————————————————————————
         
-        # breakpoint()
-        attn_output = self.o_proj_hadamard(attn_output.transpose(-1, -2)).transpose(-1, -2)
-        # breakpoint()
+        # if kwargs.get("w4a4",False):
+        
+        act_buffer_had = kwargs.get("act_buffer_had",None)
+        act_buffer_had = None
+        attn_output = self.o_proj_hadamard(attn_output.transpose(-1, -2).reshape(-1,self.num_heads) , act_buffer_had ).view(-1, self.head_dim, self.num_heads).transpose(-1, -2)
+        
+        
         attn_output = attn_output.reshape(bsz * q_len, self.hidden_size).contiguous()
         
         quantized_buffer_qkv = kwargs.get("quantized_buffer_qkv",None)
@@ -213,9 +227,8 @@ class QuarotLlamaAttention(LlamaAttention):
         # if kwargs.get("w4a4",False):
         #     # breakpoint()
         quantized_attn_output = self.quantizer(attn_output, scale_buffer,quantized_buffer_qkv,**kwargs)
-        
         act_buffer_output = kwargs.get("act_buffer_output",None)
-        attn_output = self.o_proj(quantized_attn_output,act_buffer_output,**kwargs)
+        attn_output = self.o_proj(quantized_attn_output, act_buffer_output,**kwargs)
 
         return attn_output
 
@@ -251,7 +264,9 @@ class QuarotLlamaMLP(LlamaMLP):
         gate_up = self.act_fn(gate) * up_proj
         
         # hadamard
-        gate_up = self.online_hadamard(gate_up)
+        act_buffer_had_mlp = kwargs.get("act_buffer_had_mlp",None)
+        act_buffer_had_mlp = None
+        gate_up = self.online_hadamard(gate_up,act_buffer_had_mlp)
         
         # quantisation
         quantized_buffer_mlp = kwargs.get("quantized_buffer_mlp",None)

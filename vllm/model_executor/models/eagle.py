@@ -42,7 +42,7 @@ class EAGLE(nn.Module):
     Reference implementation: https://github.com/SafeAILab/EAGLE
     
     Differences from reference implementation:
-    1. In reference, LlamaDecoderLayer implementation doesn't have 
+    1. In reference, LlamaDecoderLayer implementation doesn't hafve 
        input_layernorm for 1st decoder layer (https://github.com/SafeAILab/EAGLE/blob/7d065d084443fbfd386f88839efd7193c12be869/eagle/model/cnets.py#L427).
        Following this approach, our implementation also disables
        the input_layernorm for the first decoder layer.

@@ -174,6 +174,8 @@ class FlashAttentionMetadata(AttentionMetadata):
     # and block tables
     cross_slot_mapping: Optional[torch.Tensor] = None
     cross_block_tables: Optional[torch.Tensor] = None
+    
+    qspec = False
 
     @property
     def is_all_encoder_attn_metadata_set(self):
@@ -707,24 +709,26 @@ class FlashAttentionImpl(AttentionImpl):
                 torch.ops._C_cache_ops.reshape_and_cache_flash(
                     key,
                     value,
-                    kv_cache[0],
-                    kv_cache[1],
+                    key_cache, #kv_cache[0],
+                    value_cache, #kv_cache[1],
                     updated_slot_mapping.flatten(),  # type: ignore[union-attr]
                     kv_cache_dtype,
                     layer._k_scale,
                     layer._v_scale,
                 )
-
-        (num_prefill_query_tokens, num_prefill_kv_tokens,
-        num_decode_query_tokens) = \
+                
+        if not attn_metadata.qspec:
+            # breakpoint()
+            (num_prefill_query_tokens, num_prefill_kv_tokens, num_decode_query_tokens) = \
             get_num_prefill_decode_query_kv_tokens(attn_metadata, attn_type)
-        decode_query = query[num_prefill_query_tokens:]
-        decode_output = output[num_prefill_query_tokens:]
-        # QKV for prefill.
-        query = query[:num_prefill_query_tokens]
-        prefill_output = output[:num_prefill_query_tokens]
-        assert query.shape[0] == num_prefill_query_tokens
-        assert decode_query.shape[0] == num_decode_query_tokens
+            decode_query = query[num_prefill_query_tokens:]
+            decode_output = output[num_prefill_query_tokens:]
+            # QKV for prefill.
+            query = query[:num_prefill_query_tokens]
+            prefill_output = output[:num_prefill_query_tokens]
+            assert query.shape[0] == num_prefill_query_tokens
+            assert decode_query.shape[0] == num_decode_query_tokens
+
 
         if prefill_meta := attn_metadata.prefill_metadata:
             # Prompt run.
@@ -781,7 +785,12 @@ class FlashAttentionImpl(AttentionImpl):
             # Decoding run.
             # Use flash_attn_varlen_func kernel for speculative decoding
             # because different queries might have different lengths.
-
+            # breakpoint()
+            if attn_metadata.qspec:
+                decode_query = query
+                decode_output = output
+                
+                
             assert decode_meta.max_decode_query_len is not None
             # use only for actual varlen decoding
             if decode_meta.max_decode_query_len > 1:

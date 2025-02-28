@@ -273,8 +273,9 @@ class TP1DraftModelRunner(ModelRunnerWrapperBase):
 
             kwargs = {"previous_hidden_states": hidden_states} \
                 if previous_hidden_states is not None else {}
-            kwargs["w4a4"] = w4a4
+            
             if w4a4: # TODO the buffers can be resued for the whole loop
+                kwargs["w4a4"] = w4a4
                 seq_len = model_input.input_tokens.shape[0]
                 num_heads = self.model_config.hf_config.num_attention_heads
                 num_kv_heads = self.model_config.hf_config.num_key_value_heads
@@ -291,6 +292,12 @@ class TP1DraftModelRunner(ModelRunnerWrapperBase):
                     seq_len,q_size + 2*kv_size),dtype=torch.float16,device=self.device)
                 act_buffer_output = torch.empty((
                     seq_len,hidden_size),dtype=torch.float16,device=self.device)
+                act_buffer_attn = torch.empty((
+                    seq_len,num_heads,head_dim),dtype=torch.float16,device=self.device)
+                act_buffer_had = torch.empty((
+                    seq_len*hidden_size//num_heads, num_heads),dtype=torch.float16,device=self.device)
+                act_buffer_had_mlp = torch.empty((
+                    seq_len*intermediate_size // 512, 512),dtype=torch.float16,device=self.device)
                 act_buffer_gate = torch.empty((
                     seq_len,intermediate_size),dtype=torch.float16,device=self.device)
                 act_buffer_up = torch.empty((
@@ -308,7 +315,11 @@ class TP1DraftModelRunner(ModelRunnerWrapperBase):
                 kwargs["act_buffer_up"] = act_buffer_up
                 kwargs["scale_buffer"] = scale_buffer
                 kwargs["input_sum_buffer"] = input_sum_buffer
-                
+                kwargs["act_buffer_had"] = act_buffer_had
+                kwargs["act_buffer_had_mlp"] = act_buffer_had_mlp   
+                kwargs["act_buffer_attn"] = act_buffer_attn
+                # breakpoint()
+                model_input.attn_metadata.qspec = True
                     
                 
                 
@@ -327,6 +338,7 @@ class TP1DraftModelRunner(ModelRunnerWrapperBase):
                     **kwargs,
                 )
 
+            # model_input.attn_metadata.qspec = False
             # Compute the logits.
             logits = self.model.compute_logits(hidden_states,
                                                model_input.sampling_metadata)

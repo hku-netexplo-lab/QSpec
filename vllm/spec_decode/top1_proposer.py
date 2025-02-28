@@ -77,6 +77,7 @@ class Top1Proposer(SpeculativeProposer):
             )
             # pass the parameters
             nonzero_execute_model_req.w4a4 = execute_model_req.w4a4
+            # breakpoint()
             maybe_sampler_output, transposed = self._worker.sampler_output(
                 execute_model_req=nonzero_execute_model_req,
                 sample_len=proposal_len,

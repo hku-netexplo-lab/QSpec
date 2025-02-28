@@ -331,6 +331,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
 
         # NOTE(cade): load_model is not part of the WorkerBase interface.
         self.scorer_worker.load_model()
+        # breakpoint()
         if self.draft_model_config.hf_config.model_type == "llama_quarot":
             self.proposer_worker.load_model(self.scorer_worker.model_runner.model)
             self.proposer_worker.model_runner.vllm_config.compilation_config.static_forward_context = self.scorer_worker.model_runner.vllm_config.compilation_config.static_forward_context
@@ -416,15 +417,21 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         self.scorer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
                                             num_cpu_blocks=num_cpu_blocks)
         
-        # origin ————————————————————————————————————
-        # self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
-        #                                       num_cpu_blocks=num_cpu_blocks)
-        # end of origin ————————————————————————————————————
-        self.proposer_worker.ref_initilize_cache(num_gpu_blocks=num_gpu_blocks,
+        
+        if self.draft_model_config.hf_config.model_type == "llama_quarot":
+            self.proposer_worker.ref_initilize_cache(num_gpu_blocks=num_gpu_blocks,
                                                  num_cpu_blocks=num_cpu_blocks,
                                                  cache_engine = self.scorer_worker.cache_engine,
                                                  gpu_cache = self.scorer_worker.gpu_cache,
         )
+        else:
+            self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks, num_cpu_blocks=num_cpu_blocks)
+        #      
+        # origin ————————————————————————————————————
+        # self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
+        #                                       num_cpu_blocks=num_cpu_blocks)
+        # end of origin ————————————————————————————————————
+        
         
    
         # breakpoint()
@@ -749,6 +756,20 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         # With prefill chunking, expect requests to have prompts first
         # so that backend gets prefill|decode.
         assert num_lookahead_slots == execute_model_req.num_lookahead_slots
+        
+        # print("Start profiling")
+        # prof1 = torch.profiler.profile(
+        # activities=[
+        #     torch.profiler.ProfilerActivity.CPU,
+        #     torch.profiler.ProfilerActivity.CUDA,
+        # ],
+        # record_shapes=True,
+        # profile_memory=False,
+        # with_stack=True,
+        # on_trace_ready=torch.profiler.tensorboard_trace_handler('/workspace/qspec/v1/QuaRot/e2e/log_quantized'),
+        # )
+        # prof1.start()    
+        
 
         # Pass last hidden states from target model to proposer
         execute_model_req.previous_hidden_states = self.previous_hidden_states
@@ -804,6 +825,9 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                        scoring_timer.elapsed_time_ms,
                        verification_timer.elapsed_time_ms)
 
+        # prof1.stop()
+        # print("profiling finished")
+        
         return self._create_output_sampler_list(
             execute_model_req.seq_group_metadata_list,
             accepted_token_ids,

@@ -134,15 +134,18 @@ class Attention(nn.Module):
         value: torch.Tensor,
         kv_cache: torch.Tensor,
         attn_metadata: AttentionMetadata,
+        output = None,
     ) -> torch.Tensor:
         if self.use_output:
-            output = torch.empty_like(query)
+            if output is None:
+                output = torch.empty_like(query)
             hidden_size = query.size(-1)
             # Reshape the query, key, and value tensors.
             # NOTE(woosuk): We do this outside the custom op to minimize the
             # CPU overheads from the non-CUDA-graph regions.
             query = query.view(-1, self.num_heads, self.head_size)
-            output = output.view(-1, self.num_heads, self.head_size)
+            if output.dim() != 3:
+                output = output.view(-1, self.num_heads, self.head_size)
             if key is not None:
                 key = key.view(-1, self.num_kv_heads, self.head_size)
             if value is not None:

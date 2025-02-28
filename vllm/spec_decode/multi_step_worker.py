@@ -75,6 +75,9 @@ class MultiStepWorker(ProposerWorkerBase, DelegateWorkerBase):
             self._expand_execute_model_request(
                 execute_model_req, seq_ids_with_bonus_token_in_last_step)
 
+        expanded_request = execute_model_req
+        indices_of_seq_with_bonus_tokens = None
+        
         expanded_request.w4a4  = execute_model_req.w4a4
         
         # Run model sample_len times.
@@ -108,7 +111,9 @@ class MultiStepWorker(ProposerWorkerBase, DelegateWorkerBase):
                     model_output, expanded_request.seq_group_metadata_list,
                     indices_of_seq_with_bonus_tokens)
                 model_outputs.append(model_output)
-
+                
+        return model_outputs, True
+        
         # move indices to device to avoid stream sync
         indices_of_seq_with_bonus_tokens = torch.tensor(
             indices_of_seq_with_bonus_tokens, device=self.device)
