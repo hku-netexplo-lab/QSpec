@@ -228,6 +228,8 @@ class LLMEngine:
         self.prompt_adapter_config = vllm_config.prompt_adapter_config  # noqa
         self.observability_config = vllm_config.observability_config or ObservabilityConfig(  # noqa
         )
+        
+        self.last_emitted_token_num = 0
 
         logger.info(
             "Initializing an LLM engine (v%s) with config: %s, "
@@ -475,6 +477,11 @@ class LLMEngine:
         stat_loggers: Optional[Dict[str, StatLoggerBase]] = None,
     ) -> "LLMEngine":
         """Creates an LLM engine from the engine arguments."""
+        # fix all seed to 42
+        torch.manual_seed(42)
+        torch.cuda.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
+        torch.backends.cudnn.deterministic = True   
         # Create the engine configs.
         engine_config = engine_args.create_engine_config(usage_context)
         executor_class = cls._get_executor_cls(engine_config)
@@ -1517,6 +1524,7 @@ class LLMEngine:
                      skip: Optional[List[int]] = None) -> None:
         """Forced log when no requests active."""
         if self.log_stats:
+            # breakpoint()
             stats = self._get_stats(scheduler_outputs, model_output,
                                     finished_before, skip)
             for logger in self.stat_loggers.values():
@@ -1734,9 +1742,13 @@ class LLMEngine:
             #   num_generation_tokens = num_batched_tokens - num_prompt_tokens
             #   + num_generation_tokens_from_prefill_groups (since we generate
             #   one token on prefills on iters where the prefill finishes).
+
+                
+
             num_generation_tokens_iter = (
                 actual_num_batched_tokens - num_prompt_tokens_iter +
                 num_generation_tokens_from_prefill_groups)
+                
             num_tokens_iter = (num_generation_tokens_iter +
                                num_prompt_tokens_iter)
         # Spec decode, if enabled, emits specialized metrics from the worker in
@@ -1744,9 +1756,12 @@ class LLMEngine:
         if model_output and isinstance(model_output[0], SamplerOutput) and (
                 model_output[0].spec_decode_worker_metrics is not None):
             spec_decode_metrics = model_output[0].spec_decode_worker_metrics
+            num_generation_tokens_iter = model_output[0].spec_decode_worker_metrics.emitted_tokens - self.last_emitted_token_num 
+            self.last_emitted_token_num = model_output[0].spec_decode_worker_metrics.emitted_tokens
+            num_tokens_iter = (num_generation_tokens_iter + num_prompt_tokens_iter)
         else:
             spec_decode_metrics = None
-
+       
         return Stats(
             now=now,
             # System stats

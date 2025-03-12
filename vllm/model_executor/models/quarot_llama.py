@@ -140,22 +140,24 @@ class QuarotLlamaAttention(LlamaAttention):
         
         
         
-    def fuse_qkv(self):
+    def fuse_qkv(self,matmul_a16):
         if self.qkv_fused:
             return self
         self.qkv_fused = True
         q_size = self.num_heads * self.head_dim
         kv_size = self.num_key_value_heads * self.head_dim
-        self.qkv_proj = quarot_nn.Linear4bit(self.q_proj.in_features,q_size+ 2*kv_size,bias=False,w4a4=self.q_proj.w4a4)
+        self.qkv_proj = quarot_nn.Linear4bit(self.q_proj.in_features,q_size+ 2*kv_size,bias=False)
         self.qkv_proj.weight.data[:q_size] = self.q_proj.weight.data
         self.qkv_proj.weight.data[q_size:q_size+kv_size] = self.k_proj.weight.data
         self.qkv_proj.weight.data[q_size+kv_size:] = self.v_proj.weight.data
         self.qkv_proj.weight.data = self.qkv_proj.weight.data.to(torch.int8).cuda()
+        
         self.qkv_proj.weight_scales = self.qkv_proj.weight_scales.view(-1)
         self.qkv_proj.weight_scales.data[:q_size] = self.q_proj.weight_scales.data.view(-1)
         self.qkv_proj.weight_scales.data[q_size:q_size+kv_size] = self.k_proj.weight_scales.data.view(-1)
         self.qkv_proj.weight_scales.data[q_size+kv_size:] = self.v_proj.weight_scales.data.view(-1)
         self.qkv_proj.weight_scales = self.qkv_proj.weight_scales.cuda()
+        self.qkv_proj.a16_matmul = matmul_a16
         # self.qkv_proj.output_buffer = torch.empty(self.bsz, self.q_proj.out_features * 3, dtype=torch.float16, device="cuda")
         del self.q_proj
         del self.k_proj
@@ -243,6 +245,8 @@ class QuarotLlamaMLP(LlamaMLP):
         self.gate_proj = quarot_nn.Linear4bit.from_float(self.gate_proj,**kwargs)
         self.online_hadamard = quarot_nn.OnlineHadamard(self.intermediate_size)
         self.down_proj = quarot_nn.Linear4bit.from_float(self.down_proj,**kwargs)
+        self.fused = False
+        self.gate_up = None
         
         # self.down_proj = QuaRotSequential(
         #     quarot_nn.OnlineHadamard(self.intermediate_size),
@@ -253,13 +257,20 @@ class QuarotLlamaMLP(LlamaMLP):
 
     def forward(self, x,**kwargs):
         
-        # gate_proj
-        act_buffer_gate = kwargs.get("act_buffer_gate",None)
-        gate = self.gate_proj(x,act_buffer_gate,**kwargs)
-        
-        # up_proj
-        act_buffer_up = kwargs.get("act_buffer_up",None)
-        up_proj = self.up_proj(x,act_buffer_up,**kwargs)
+        if not self.fused:
+            # gate_proj
+            act_buffer_gate = kwargs.get("act_buffer_gate",None)
+            gate = self.gate_proj(x,act_buffer_gate,**kwargs)
+            
+            # up_proj
+            act_buffer_up = kwargs.get("act_buffer_up",None)
+            up_proj = self.up_proj(x,act_buffer_up,**kwargs)
+        else:
+            act_buffer_gate_up = kwargs.get("act_buffer_gate_up",None)
+            gate_up = self.gate_up(x,act_buffer_gate_up,**kwargs)
+            up_proj, gate = gate_up[:,:14336], gate_up[:,14336:]
+            
+            
         
         # Silu activation
         gate_up = self.act_fn(gate) * up_proj
@@ -283,7 +294,20 @@ class QuarotLlamaMLP(LlamaMLP):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x,**kwargs)) * self.up_proj(x,**kwargs),**kwargs)
         return down_proj
     
-    
+    def fuse_gate_up(self,matmul_a16):
+        self.fused = True
+        self.gate_up = quarot_nn.Linear4bit(self.up_proj.in_features,self.up_proj.out_features*2,bias=False)
+        self.gate_up.weight.data[:self.up_proj.out_features] = self.up_proj.weight.data
+        self.gate_up.weight.data[self.up_proj.out_features:] = self.gate_proj.weight.data
+        self.gate_up.weight.data = self.gate_up.weight.data.to(torch.int8).cuda()
+        
+        self.gate_up.weight_scales = self.gate_up.weight_scales.view(-1)
+        self.gate_up.weight_scales.data[:self.up_proj.out_features] = self.up_proj.weight_scales.data.view(-1)
+        self.gate_up.weight_scales.data[self.up_proj.out_features:] = self.gate_proj.weight_scales.data.view(-1)
+        self.gate_up.weight_scales = self.gate_up.weight_scales.cuda()
+        self.gate_up.a16_matmul = matmul_a16
+        del self.up_proj
+        del self.gate_proj
     
     
 
@@ -538,6 +562,20 @@ class QuarotLlamaForCausalLM(QuarotFP16LlamaForCausalLM):
         self.cache_dtype = "float16"
         
     def fuse_qkv(self):
+        from vllm.model_executor.layers.quarot_nn.linear import get_matmul_op_w4a16
+        in_feature = 4096
+        out_feature = 4096 + 1024 * 2
+        matmul_a16 = get_matmul_op_w4a16(in_features=in_feature, out_features=out_feature)
         for layer in self.model.layers:
-            layer.self_attn.fuse_qkv()
+            layer.self_attn.fuse_qkv(matmul_a16)
+        return self
+    
+    
+    def fuse_gate_up(self):
+        from vllm.model_executor.layers.quarot_nn.linear import get_matmul_op_w4a16
+        in_feature = 4096
+        out_feature = 14336 * 2
+        matmul_a16 = get_matmul_op_w4a16(in_features=in_feature, out_features=out_feature)
+        for layer in self.model.layers:
+            layer.mlp.fuse_gate_up(matmul_a16)
         return self

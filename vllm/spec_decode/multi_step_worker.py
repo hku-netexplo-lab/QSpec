@@ -71,11 +71,11 @@ class MultiStepWorker(ProposerWorkerBase, DelegateWorkerBase):
         # Expand the batch for sequences with a bonus token.
         # Perform a forward pass on the expanded batch and filter the
         # response to retain only the original sequences' responses.
-        expanded_request, indices_of_seq_with_bonus_tokens =\
-            self._expand_execute_model_request(
-                execute_model_req, seq_ids_with_bonus_token_in_last_step)
-
-        if self.model_config.hf_config.model_type == "llama_quarot":
+        if self.model_config.hf_config.model_type != "llama_quarot":
+            expanded_request, indices_of_seq_with_bonus_tokens =\
+                self._expand_execute_model_request(
+                    execute_model_req, seq_ids_with_bonus_token_in_last_step)
+        else: # for QSpec
             expanded_request = execute_model_req
             indices_of_seq_with_bonus_tokens = None
         

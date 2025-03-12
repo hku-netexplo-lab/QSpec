@@ -104,6 +104,7 @@ class RejectionSampler(SpecDecodeStochasticBaseSampler):
         """
         # Only perform shape/dtype/device checking in strict mode, as it adds
         # overhead.
+        # breakpoint()
         if self._strict_mode:
             self._raise_if_incorrect_input(target_with_bonus_probs,
                                            draft_token_ids, bonus_token_ids,
