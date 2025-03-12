@@ -4,7 +4,8 @@ import quarot
 from torchao.ops import rowwise_scaled_linear_cutlass_s4s4
 #import fast_hadamard_transform
 from quarot.functional import unpack_i4
-
+from .qspec_gemm import awq_gemm_triton_sym_nozp_perchannel
+import torch.nn.functional as F
 
 class ShapeHandler:
     def __init__(self, x: torch.Tensor):
@@ -24,7 +25,7 @@ class ShapeHandler:
 
 
 class Linear4bit(torch.nn.Module):
-    def __init__(self, in_features, out_features, bias=False, dtype=torch.float16, w4a4=False):
+    def __init__(self, in_features, out_features, bias=False, dtype=torch.float16, **kwargs):
         '''
         Symmetric 4-bit Linear Layer.
         '''
@@ -41,10 +42,12 @@ class Linear4bit(torch.nn.Module):
         else:
             self.bias = None
             
-        self.bsz = 1
-        self.output_buffer = torch.empty(self.bsz, self.out_features, dtype=torch.float16, device="cuda")
-        self.w4a4 = w4a4
         self.de_weight = None
+        # key = in_features-out_features
+        key = f"{in_features}-{out_features}"
+        self.a16_matmul = kwargs.get(key,None)
+        self.mask  =(1 << 3) | (1 << 7)
+        # breakpoint()
 
             
     
@@ -83,17 +86,29 @@ class Linear4bit(torch.nn.Module):
             out = quarot.fuse_matmul(x, scales_x, self.weight, self.weight_scales, self.bias, self.output_buffer)
         return out
 
-    def forward_w4a16(self, x):
+    def forward_w4a16(self, x,C=None):
         # print(f"forward_w4a16: {x.shape}")
-        if self.de_weight is None and self.weight.shape[-1] != x.shape[-1]:
-            self.de_weight = unpack_i4(self.weight.to(torch.uint8)).to(torch.float16)
+        # if self.de_weight is None and self.weight.shape[-1] != x.shape[-1]:
+        #     self.de_weight = (self.weight_scales.view(-1, 1) * unpack_i4(self.weight.to(torch.uint8)).to(torch.float16)).T
         
-        if x.dim() != 2:
-            x = x.view(-1, self.in_features)
+        # if x.dim() != 2:
+        #     x = x.view(-1, self.in_features)
+            
+        # if C is None:
+        #     C = torch.empty(x.shape[0], self.weight.shape[0], dtype=torch.float16, device="cuda")
+            
+        # out = x @ self.de_weight
+        if self.weight_scales.dim() == 2:
+            self.weight_scales = self.weight_scales.view(-1)
+        if self.weight.dtype != torch.int8:
+            self.weight = self.weight.to(torch.int8)
+            
+        if C is None:
+            C = torch.empty(x.shape[0], self.weight.shape[0], dtype=torch.float16, device="cuda")
+            
+        self.a16_matmul(x, self.weight ^ self.mask , output=C, scale = self.weight_scales)
         
-        dequantized_weight = self.weight_scales.view(-1, 1) * self.de_weight 
-        out = x @ dequantized_weight.T
-        return out
+        return C
         
         
         
@@ -109,7 +124,7 @@ class Linear4bit(torch.nn.Module):
         weight_matrix = module.weight.data
         
         
-        int_module = Linear4bit(module.in_features, module.out_features, bias=module.bias is not None, dtype=weight_matrix.dtype,w4a4 = kwargs.get("w4a4",False)).to(weight_matrix.dtype)
+        int_module = Linear4bit(module.in_features, module.out_features, bias=module.bias is not None, dtype=weight_matrix.dtype,**kwargs).to(weight_matrix.dtype)
         if weight_scales is not None:
             assert weight_scales.shape == (module.out_features, 1), 'weight_scales should have shape (out_features, 1)'
             weight_matrix = weight_matrix.cuda()
@@ -123,3 +138,29 @@ class Linear4bit(torch.nn.Module):
                 int_module.bias.copy_(module.bias)
         
         return int_module
+
+
+def get_matmul_op_w4a16(in_features, out_features, with_scaling = True, enable_tuning = False):
+    '''
+    Get the matmul operator for the 4-bit linear layer.
+    '''
+    import bitblas
+    matmul_config_a16 = bitblas.MatmulConfig(
+        M = [16, 32, 64, 128, 256, 512,1024,2048,4096],
+        N = out_features,
+        K = in_features,
+        A_dtype= "float16",
+        W_dtype= "int4",
+        accum_dtype="float16",
+        out_dtype="float16",
+        layout="nt",
+        with_bias=False,
+        propagate_b=False,
+        fast_decoding=False,
+        group_size=-1,
+        with_scaling=with_scaling,
+        with_zeros=False,
+        zeros_mode=None,
+    )
+    matmul_a16 = bitblas.Matmul(config=matmul_config_a16, enable_tuning=enable_tuning)
+    return matmul_a16     

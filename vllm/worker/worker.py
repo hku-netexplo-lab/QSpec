@@ -205,8 +205,19 @@ class Worker(LocalOrDistributedWorkerBase):
             self.cache_config.gpu_memory_utilization
             
         # shared weight in QSpec paradigm
+        # breakpoint()
+        avoid_oom_memory = 0
+        if self.speculative_config is not None:
+            avoid_oom_memory = 2 * result.torch_peak_increase
+            logger.warning(f"avoid_oom_memory: {avoid_oom_memory / GiB_bytes} GiB, this only need for EAGLE model")
+        
+        # if self.model_config.hf_config.model_type == "eagle":
+        #     avoid_oom_memory = 2 * result.torch_peak_increase
+        # else:
+        #     avoid_oom_memory = 0
+            
         available_kv_cache_memory = (memory_for_current_instance -
-                                    result.non_kv_cache_memory )
+                                    result.non_kv_cache_memory -avoid_oom_memory)
             
 
         # Calculate the number of blocks that can be allocated with the
@@ -221,7 +232,6 @@ class Worker(LocalOrDistributedWorkerBase):
                                  cache_block_size)
         num_gpu_blocks = max(num_gpu_blocks, 0)
         num_cpu_blocks = max(num_cpu_blocks, 0)
-
         msg = (f"Memory profiling takes {result.profile_time:.2f} seconds\n"
                "the current vLLM instance can use "
                "total_gpu_memory "

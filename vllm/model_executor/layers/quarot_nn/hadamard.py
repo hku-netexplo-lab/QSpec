@@ -23,7 +23,7 @@ class OnlineHadamard(torch.nn.Module):
             x = x.float()
         if self.rem_dim==1:
             return quarot.functional.opt_matmul_hadU_cuda(x, self.had_rem_dim, self.rem_dim,out = out,scale = self.scale_32)
-            
+        
         x = quarot.functional.opt_matmul_hadU_cuda(x, self.had_rem_dim, self.rem_dim,out = out,scale = self.scale_14336)
         x = x.to(x_dtype)
         return x

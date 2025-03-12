@@ -405,9 +405,16 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         proposer_cache_block_size_bytes = (
             self.proposer_worker.get_cache_block_size_bytes())
 
+        # need to be improve for llama_quarot
+        
         new_num_gpu_blocks = split_num_cache_blocks_evenly(
             scorer_cache_block_size_bytes, proposer_cache_block_size_bytes,
             num_gpu_blocks)
+        
+        if self.draft_model_config.hf_config.model_type == "llama_quarot":
+            new_num_gpu_blocks = num_gpu_blocks
+        
+        
         return new_num_gpu_blocks, num_cpu_blocks
 
     def initialize_cache(self, num_gpu_blocks: int,
@@ -757,18 +764,18 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         # so that backend gets prefill|decode.
         assert num_lookahead_slots == execute_model_req.num_lookahead_slots
         
-        # print("Start profiling")
-        # prof1 = torch.profiler.profile(
-        # activities=[
-        #     torch.profiler.ProfilerActivity.CPU,
-        #     torch.profiler.ProfilerActivity.CUDA,
-        # ],
-        # record_shapes=True,
-        # profile_memory=False,
-        # with_stack=True,
-        # on_trace_ready=torch.profiler.tensorboard_trace_handler('/workspace/qspec/v1/QuaRot/e2e/log_quantized'),
-        # )
-        # prof1.start()    
+        print("Start profiling")
+        prof1 = torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        record_shapes=True,
+        profile_memory=False,
+        with_stack=True,
+        on_trace_ready=torch.profiler.tensorboard_trace_handler('/workspace/qspec/v1/QuaRot/e2e/log_quantized'),
+        )
+        prof1.start()    
         
 
         # Pass last hidden states from target model to proposer
@@ -825,8 +832,8 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                        scoring_timer.elapsed_time_ms,
                        verification_timer.elapsed_time_ms)
 
-        # prof1.stop()
-        # print("profiling finished")
+        prof1.stop()
+        print("profiling finished")
         
         return self._create_output_sampler_list(
             execute_model_req.seq_group_metadata_list,

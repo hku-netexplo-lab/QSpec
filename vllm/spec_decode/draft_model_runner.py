@@ -298,10 +298,11 @@ class TP1DraftModelRunner(ModelRunnerWrapperBase):
                     seq_len*hidden_size//num_heads, num_heads),dtype=torch.float16,device=self.device)
                 act_buffer_had_mlp = torch.empty((
                     seq_len*intermediate_size // 512, 512),dtype=torch.float16,device=self.device)
-                act_buffer_gate = torch.empty((
-                    seq_len,intermediate_size),dtype=torch.float16,device=self.device)
-                act_buffer_up = torch.empty((
-                    seq_len,intermediate_size),dtype=torch.float16,device=self.device)
+                
+                act_buffer_gate_up = torch.empty((
+                    seq_len, 2*intermediate_size ),dtype=torch.float16,device=self.device)
+
+                
                 scale_buffer = torch.empty((
                     seq_len),dtype=torch.float16,device=self.device)
                 input_sum_buffer = torch.empty((
@@ -311,8 +312,7 @@ class TP1DraftModelRunner(ModelRunnerWrapperBase):
                 kwargs["quantized_buffer_mlp"] = quantized_buffer_mlp
                 kwargs["act_buffer_qkv"] = act_buffer_qkv
                 kwargs["act_buffer_output"] = act_buffer_output
-                kwargs["act_buffer_gate"] = act_buffer_gate
-                kwargs["act_buffer_up"] = act_buffer_up
+                kwargs["act_buffer_gate_up"] = act_buffer_gate_up
                 kwargs["scale_buffer"] = scale_buffer
                 kwargs["input_sum_buffer"] = input_sum_buffer
                 kwargs["act_buffer_had"] = act_buffer_had

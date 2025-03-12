@@ -1100,19 +1100,34 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
             self.model = model
         else:
             with DeviceMemoryProfiler() as m:
+                
                 if "QuaRot" in self.model_config.model:
                     import transformers
+                    from vllm.model_executor.layers.quarot_nn.linear import get_matmul_op_w4a16
                     with transformers.modeling_utils.no_init_weights(): 
                         with set_current_vllm_config(self.vllm_config):
                             from vllm.model_executor.models import quarot_llama
                             torch.set_default_dtype(torch.float16)
                             kwargs= {}
-                            # set w4a4
-                            # if self.is_driver_worker:
-                            #     kwargs["w4a4"] = False
-                            # else:
                             kwargs["w4a4"] = True
+                            
+                            # kv_proj_a16 = get_matmul_op_w4a16(in_features=4096, out_features=1024)
+                            # logger.info("Init kv_proj_a16")
+                            # kwargs["4096-1024"] = kv_proj_a16
+                            
+                            qo_proj_a16 = get_matmul_op_w4a16(in_features=4096, out_features=4096)
+                            logger.info("Init qo_proj_a16")
+                            kwargs["4096-4096"] = qo_proj_a16
+                            
+                            # gate_up_proj_a16 = get_matmul_op_w4a16(in_features=4096, out_features=14336)
+                            # logger.info("Init gate_up_proj_a16")
+                            # kwargs["4096-14336"] = gate_up_proj_a16
+                            
+                            gate_down_proj_a16 = get_matmul_op_w4a16(in_features=14336, out_features=4096)
+                            logger.info("Init gate_down_proj_a16")
+                            kwargs["14336-4096"] = gate_down_proj_a16
                             # breakpoint()
+                            
                             self.model = quarot_llama.QuarotLlamaForCausalLM(config=self.model_config.hf_config, vllm_config=self.vllm_config,**kwargs)
                             from safetensors.torch import load_file
                             weight_path = "/workspace/qspec/models/QuaRot/L3/model-00001-of-00002.safetensors"
@@ -1126,7 +1141,12 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
                             self.model.load_state_dict(state_dict)
                             torch.set_default_dtype(torch.float16)
                             self.model.cuda()    
+                            
+                            logger.info("fuse qkv")
                             self.model.fuse_qkv()
+                            logger.info("fuse gate up")
+                            self.model.fuse_gate_up()
+                            
                         
                 else:
                     self.model = get_model(vllm_config=self.vllm_config)
@@ -1755,7 +1775,9 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
                 if self.model_config.hf_config.model_type != 'llama_quarot':
                     kwargs.pop("w4a4", None)
                 # else:
+                #     # enable w4a4 path
                 #     kwargs["w4a4"] = True
+                #     # calculate the buffer sizes
                 #     seq_len = model_input.input_tokens.shape[0]
                 #     num_heads = self.model_config.hf_config.num_attention_heads
                 #     num_kv_heads = self.model_config.hf_config.num_key_value_heads
@@ -1764,6 +1786,7 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
                 #     head_dim = hidden_size // num_heads
                 #     q_size = head_dim * num_heads
                 #     kv_size = head_dim * num_kv_heads
+                #     # init the buffers
                 #     quantized_buffer_qkv = torch.empty((
                 #         seq_len,hidden_size//2),dtype=torch.int8,device=self.device)
                 #     quantized_buffer_mlp = torch.empty((
@@ -1778,29 +1801,26 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
                 #         seq_len*hidden_size//num_heads, num_heads),dtype=torch.float16,device=self.device)
                 #     act_buffer_had_mlp = torch.empty((
                 #         seq_len*intermediate_size // 512, 512),dtype=torch.float16,device=self.device)
-                #     act_buffer_gate = torch.empty((
-                #         seq_len,intermediate_size),dtype=torch.float16,device=self.device)
-                #     act_buffer_up = torch.empty((
-                #         seq_len,intermediate_size),dtype=torch.float16,device=self.device)
+                #     act_buffer_gate_up = torch.empty((
+                #         seq_len, 2*intermediate_size ),dtype=torch.float16,device=self.device)
                 #     scale_buffer = torch.empty((
                 #         seq_len),dtype=torch.float16,device=self.device)
                 #     input_sum_buffer = torch.empty((
                 #         seq_len),dtype=torch.float16,device=self.device)
-                    
+                #     # pass the buffers to the model
                 #     kwargs["quantized_buffer_qkv"] = quantized_buffer_qkv
                 #     kwargs["quantized_buffer_mlp"] = quantized_buffer_mlp
                 #     kwargs["act_buffer_qkv"] = act_buffer_qkv
                 #     kwargs["act_buffer_output"] = act_buffer_output
-                #     kwargs["act_buffer_gate"] = act_buffer_gate
-                #     kwargs["act_buffer_up"] = act_buffer_up
+                #     kwargs["act_buffer_gate_up"] = act_buffer_gate_up
                 #     kwargs["scale_buffer"] = scale_buffer
                 #     kwargs["input_sum_buffer"] = input_sum_buffer
                 #     kwargs["act_buffer_had"] = act_buffer_had
                 #     kwargs["act_buffer_had_mlp"] = act_buffer_had_mlp   
                 #     kwargs["act_buffer_attn"] = act_buffer_attn
-                #     # breakpoint()
-                #     model_input.attn_metadata.qspec = False
-                        
+                    
+                    # end of else
+                # end of if
                     
                     
                 
