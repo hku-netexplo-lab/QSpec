@@ -1,7 +1,5 @@
 import sys
-sys.path.append('/workspace/qspec/vllm')
 import os
-os.environ["PYTHONPATH"] = "/workspace/qspec/v1/QuaRot"
 from vllm import EngineArgs
 from vllm import LLMEngine
 
@@ -19,54 +17,37 @@ RESET = "\033[0m"
 
 
 '''
-python demo.py --model models/L3 \
-    --speculative_model models/L3 \
+2. Users can use LmEval to evaluate the model on downstream tasks. 
+```bash
+lm_eval --model vllm --model_args pretrained=PATH-TO-QSPEC-MODEL,\
+speculative_model=PATH-TO-QSPEC-MODEL,num_speculative_tokens=3,\
+trust_remote_code=True,enforce_eager=True --tasks tinyGSM8k
+```
+3. Users can use demo.py to check the throughput of QSpec on their own machine.
+```bash
+ python demo.py --model PATH-TO-QSPEC-MODEL     --speculative_model PATH-TO-QSPEC-MODEL(Same as the former)      --num-speculative-tokens 3     --trust_remote_code --enforce_eager
+```
+4. Users can try other counterparts like EAGLE or N-gram etc. by changing the model name in the above commands.
+```bash
+ python demo.py --model models/Meta-Llama-3-8B-Instruct(target model) \
+    --speculative_model PATH-TO-EAGLE \
     --num-speculative-tokens 3 \
     --trust_remote_code --enforce_eager
-    
-python vllm_test.py --model /workspace/qspec/models/Meta-Llama-3-8B-Instruct \
-    --speculative_model /workspace/qspec/models/ \
-    --num-speculative-tokens 3 \
-    --trust_remote_code --enforce_eager --gpu_memory_utilization 0.3 --max_num_seqs 512
-    
-python vllm_test.py --model /workspace/qspec/models/Meta-Llama-3-8B-Instruct \
-    --num-speculative-tokens 3  --speculative_model "[ngram]" --ngram_prompt_lookup_max 4\
-    --trust_remote_code --enforce_eager --max_num_seqs 512
-    
-                
-ncu --set full -o qspec_ncu_sd_mb04 python vllm_test.py --model /workspace/qspec/models/QuaRot/L3  \
-    --speculative_model /workspace/qspec/models/QuaRot/L3  \
-    --num-speculative-tokens 3   \
-    --trust_remote_code --enforce_eager   --max_num_seqs 32
-    
-    
-python vllm_test.py --model /workspace/qspec/models/Meta-Llama-3-8B-Instruct \
-    --trust_remote_code --enforce_eager --max_num_seqs 32
-    
-    
-    
-    
-lm_eval --model vllm --model_args pretrained=/workspace/qspec/models/QuaRot/L3,\
-speculative_model=/workspace/qspec/models/QuaRot/L3,num_speculative_tokens=3,\
-trust_remote_code=True,enforce_eager=True --tasks tinyGSM8k
+```
+
                 
 '''
 
 def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
     """Create a list of test prompts with their sampling parameters."""
+    """You can modify this function to create your own test prompts."""
+    """Return a list of tuples, each containing a prompt and its sampling parameters."""
     # get test prompts from dataset-wild-chat
     import datasets
     sampling_params = SamplingParams(temperature=0.0, top_p=1.0, stop_token_ids=[128001, 128009], max_tokens=1024, stop=["Question:"])
     # start to load dataset
     dataset = datasets.load_dataset("openai/gsm8k",'main')['train']
-    # # save dataset to /workspace/qspec/datasets
-    # dataset.save_to_disk("/workspace/qspec/datasets/LongBench")
-    # load dataset from /workspace/qspec/datasets
-    # dataset = datasets.load_from_disk("/workspace/qspec/datasets/wild-chat")
-    # dataset = datasets.load_from_disk("/workspace/qspec/datasets/gsm8k")
-    # dataset = dataset["multi_news_e"]
 
-    # # breakpoint()
     shot_num = 10
     prefix = ''
     for i in range(shot_num):
@@ -102,15 +83,16 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
     print(f"{BG_PINK}The average length of the prompt is {avg_len}.{RESET}")
     return [(prompt, sampling_params) for prompt in prompts]
     
-    return [
-        ("A robot may not injure a human being",
-         SamplingParams(temperature=0.0, top_p=1.0, max_tokens=100)),
-        ("To be or not to be,",
-         SamplingParams(temperature=0.0, top_p=1.0, max_tokens=100)),
-        ("What is the meaning of life?",
-         SamplingParams(temperature=0.0, top_p=1.0, max_tokens=100)),
+    ### EAMPLE PROMPTS ###
+    # return [
+    #     ("A robot may not injure a human being",
+    #      SamplingParams(temperature=0.0, top_p=1.0, max_tokens=100)),
+    #     ("To be or not to be,",
+    #      SamplingParams(temperature=0.0, top_p=1.0, max_tokens=100)),
+    #     ("What is the meaning of life?",
+    #      SamplingParams(temperature=0.0, top_p=1.0, max_tokens=100)),
 
-    ]
+    # ]
 
 
 def process_requests(engine: LLMEngine,
@@ -123,17 +105,6 @@ def process_requests(engine: LLMEngine,
     import time
     start = time.perf_counter()
     print(f"{BG_BLUE}Start processing requests...{RESET}")
-
-    # start profiling
-    # prof = torch.profiler.profile(
-    #     activities=[
-    #         torch.profiler.ProfilerActivity.CPU,
-    #         torch.profiler.ProfilerActivity.CUDA],
-    #     on_trace_ready=torch.profiler.tensorboard_trace_handler("/workspace/qspec/vllm_profiling"),
-    #     record_shapes=True,
-    #     profile_memory=False,
-    #     with_stack=True
-    # )
     count_step = 0
     
     
@@ -147,22 +118,11 @@ def process_requests(engine: LLMEngine,
             request_outputs: List[RequestOutput] = engine.step()
             count_step += 1
             
-            # if count_step == 32:
-            #     print(f"{BG_GREEN}Start profiling...{RESET}")
-            #     prof.start() 
-
-            # if count_step == 32+16:
-            #     # stop profiling
-            #     print(f"{BG_GREEN}Stop profiling...{RESET}")
-            #     prof.stop()
-            #     exit(0)
             for request_output in request_outputs:
                 if request_output.finished:
                     finish_count += 1
                     tokens_count += len(request_output.outputs[0].token_ids)
-                    # print(f"{BG_GREEN}Request {request_output.request_id} finished.{RESET}")
-                    # print(f"Prompt: {request_output.prompt}")
-                    # print(f"Response: {request_output.outputs[0].text}") # token_ids
+
                     
     except Exception as e:
         # print the error message

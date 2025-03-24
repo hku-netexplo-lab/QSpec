@@ -2,7 +2,7 @@
 This is the official implementation of the QSpec: Speculative Decoding with Complementary Quantization Schemes. Leveraging nearly cost-free execution switching, QSpec drafts tokens with low-precision, fast activation-weight quantization, and verifies them with high-precision weight-only quantization, effectively combines the strengths of both quantization schemes.[https://arxiv.org/pdf/2410.11305]
 
 ## Installation
-! Recommended to use a virtual environment and Docker for the installation and tests. !
+! Highly recommended to use a **virtual** environment and **a Docker container** for the installation and tests. !
 1. Clone the repository
 2. CUDA 12.5 and python 3.10 are required.
 3. GLIBCXX_3.4.30 is required. If you are using a system with an older version of GLIBCXX, you can use the following command to install the required version. ``` conda install -c conda-forge libstdcxx-ng ```
@@ -18,12 +18,22 @@ TBC
 ```
 2. Users can use LmEval to evaluate the model on downstream tasks. 
 ```bash
-TBC
+lm_eval --model vllm --model_args pretrained=PATH-TO-QSPEC-MODEL,\
+speculative_model=PATH-TO-QSPEC-MODEL,num_speculative_tokens=3,\
+trust_remote_code=True,enforce_eager=True --tasks tinyGSM8k
 ```
 3. Users can use demo.py to check the throughput of QSpec on their own machine.
 ```bash
-TBC
+ python demo.py --model PATH-TO-QSPEC-MODEL     --speculative_model PATH-TO-QSPEC-MODEL(Same as the former)      --num-speculative-tokens 3     --trust_remote_code --enforce_eager
 ```
+4. Users can try other counterparts like EAGLE or N-gram etc. by changing the model name in the above commands.
+```bash
+ python demo.py --model models/Meta-Llama-3-8B-Instruct(target model) \
+    --speculative_model PATH-TO-EAGLE \
+    --num-speculative-tokens 3 \
+    --trust_remote_code --enforce_eager
+```
+
 
 ## Notes
 - QSpec's kernels were written on CUDA 12.5. Inspired by the FlashAttention, FlashInfer, TorchAO, QuaRot and other projects, we have implemented the QSpec kernels in third-party libraries.

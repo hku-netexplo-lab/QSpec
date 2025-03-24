@@ -1,5 +1,6 @@
 echo "Installing QSpec"
 echo "Installing VLLM for QSpec"
+git checkout work
 pip install -e .
 echo "Installing QSpec dependencies"
 pip install datasets

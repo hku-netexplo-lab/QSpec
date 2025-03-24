@@ -16,6 +16,7 @@ __pycache__/
 .Python
 build/
 models/
+third_party/cutlass/
 cmake-build-*/
 CMakeUserPresets.json
 develop-eggs/
