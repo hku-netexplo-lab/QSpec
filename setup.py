@@ -583,6 +583,17 @@ def get_requirements() -> List[str]:
     return requirements
 
 
+def third_party_cmake():
+    import subprocess, sys, shutil
+    
+    # install fast hadamard transform
+    # HERE = os.path.dirname(os.path.abspath(__file__))
+    hadamard_dir = os.path.join('third-party/fast-hadamard-transform')
+    print(f"Installing fast hadamard transform from {hadamard_dir}")
+    pip = shutil.which('pip')
+    retcode = subprocess.call([pip, 'install', '-e', hadamard_dir])
+
+
 ext_modules = []
 
 if _is_cuda() or _is_hip():
@@ -612,6 +623,8 @@ else:
         "build_ext":
         repackage_wheel if envs.VLLM_USE_PRECOMPILED else cmake_build_ext
     }
+
+third_party_cmake()
 
 setup(
     name="vllm",

@@ -246,6 +246,10 @@ if(VLLM_GPU_LANG STREQUAL "CUDA")
     "csrc/sparse/cutlass/sparse_compressor_entry.cu"
     "csrc/cutlass_extensions/common.cpp")
 
+  # list(APPEND VLLM_EXT_SRC
+  #   "csrc/qspec/layernorm_qspec.cu"
+  #   "csrc/qspec/rowwise_scaled_linear_cutlass_s4s4.cu")
+
   set_gencode_flags_for_srcs(
     SRCS "${VLLM_EXT_SRC}"
     CUDA_ARCHS "${CUDA_ARCHS}")

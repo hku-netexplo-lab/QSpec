@@ -28,6 +28,7 @@ from vllm.model_executor.layers.logits_processor import LogitsProcessor
 from vllm.model_executor.layers.rotary_embedding import get_rope
 
 from typing import Dict, List, Optional,Union
+from vllm import _custom_ops as ops
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -96,13 +97,14 @@ class QuarotLlamaAttention(LlamaAttention):
         self.is_neox_style = True
         self.bsz = 1
         self.rotary_emb = ERotaryEmbedding(
-            self.head_dim,
+            head_size=self.head_dim,
             rotary_dim=self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
             is_neox_style=self.is_neox_style,
             dtype = torch.get_default_dtype()
         )
+        self.cos_sin_cache = self.rotary_emb.cos_sin_cache.cuda().to(torch.float16)
         
         # get_rope(
         #     self.head_dim,
@@ -190,28 +192,49 @@ class QuarotLlamaAttention(LlamaAttention):
             query_states = self.q_proj(hidden_states,**kwargs)
             key_states = self.k_proj(hidden_states,**kwargs)
             value_states = self.v_proj(hidden_states,**kwargs)
-            
             q_len  = query_states.shape[0] // self.bsz
             bsz = self.bsz
             
             # Flash attention requires the input to have the shape
             # batch_size x seq_length x head_dim x hidden_dim
             # therefore we just need to keep the original shape
+            
         # query_states = query_states.reshape(q_len, self.num_heads, self.head_dim).contiguous() ##.transpose(1, 2)
         # key_states = key_states.reshape(q_len, self.num_key_value_heads, self.head_dim).contiguous()  ##.transpose(1, 2)
         # value_states = value_states.reshape(q_len, self.num_key_value_heads, self.head_dim).contiguous()  ##.transpose(1, 2)
-
+        # breakpoint()
+        
+        # try:
+        #     if torch.isnan(query_states).any():
+        #         print("hidden_states has nan")
+        # except:
+        #     breakpoint()
+            
+        # ops.rotary_embedding(positions, query_states, key_states, self.head_dim,
+        #                          self.cos_sin_cache, self.is_neox_style) # call the custom op directly
         query_states, key_states = self.rotary_emb.forward_cuda(positions, query_states, key_states)
 
-        # for spec-decode as draft model
+        # for spec-decode as draft model ------------------
         # query_states = query_states.to(torch.bfloat16)
         # key_states = key_states.to(torch.bfloat16)
         # value_states = value_states.to(torch.bfloat16)
         # end———————————————————————————— 
+        # try:
+        #     if torch.isnan(query_states).any():
+        #         print("hidden_states has nan")
+        # except:
+        #     breakpoint()
         act_buffer_attn = kwargs.get("act_buffer_attn",None)
         attn_output = self.attn(query_states, key_states, value_states, kv_cache, attn_metadata,act_buffer_attn).view(-1, self.num_heads, self.head_dim)
 
-        # for spec-decode as draft model
+
+        try:
+            if torch.isnan(query_states).any():
+                print("hidden_states has nan")
+        except:
+            breakpoint()
+
+        # for spec-decode as draft model ------------------
         # attn_output = attn_output.to(torch.float16)
         # end————————————————————————————
         
@@ -219,9 +242,21 @@ class QuarotLlamaAttention(LlamaAttention):
         
         act_buffer_had = kwargs.get("act_buffer_had",None)
         # act_buffer_had = None
-        attn_output = self.o_proj_hadamard(attn_output.transpose(-1, -2).reshape(-1,self.num_heads) , act_buffer_had )\
-            .view(-1, self.head_dim, self.num_heads).transpose(-1, -2)
+        attn_output = self.o_proj_hadamard(attn_output.transpose(-1, -2).reshape(-1,self.num_heads) , act_buffer_had)
+        try:
+            if torch.isnan(attn_output).any():
+                print("hidden_states has nan")
+        except Exception as e:
+            print(e)
+            breakpoint()
+            
+        attn_output = attn_output.view(-1, self.head_dim, self.num_heads).transpose(-1, -2)
         
+        try:
+            if torch.isnan(attn_output).any():
+                print("hidden_states has nan")
+        except:
+            breakpoint()
         
         attn_output = attn_output.reshape(bsz * q_len, self.hidden_size).contiguous()
         
@@ -369,7 +404,13 @@ class QuarotDecoderLayer(LlamaDecoderLayer):
         residual = hidden_states
         
         hidden_states = self.input_layernorm(hidden_states,**kwargs)    
-            
+        # try:
+        #     if torch.isnan(hidden_states).any():
+        #         print("hidden_states has nan")
+        # except:
+        #     breakpoint()
+
+        
         hidden_states = self.self_attn(positions=positions,
                                 hidden_states=hidden_states,
                                 kv_cache=kv_cache,
@@ -379,10 +420,18 @@ class QuarotDecoderLayer(LlamaDecoderLayer):
         hidden_states = residual + hidden_states.view_as(residual)
         # Fully Connected
         residual = hidden_states
-        
+        # try:
+        #     if torch.isnan(hidden_states).any():
+        #         print("hidden_states has nan")
+        # except:
+        #     breakpoint()
         hidden_states = self.post_attention_layernorm(hidden_states,**kwargs)
         # breakpoint()
-        
+        # try:
+        #     if torch.isnan(hidden_states).any():
+        #         print("hidden_states has nan")
+        # except:
+        #     breakpoint()
         hidden_states = self.mlp(hidden_states,**kwargs).view_as(residual)
         hidden_states = residual + hidden_states
 
@@ -456,14 +505,30 @@ class LlamaModel(nn.Module):
                 hidden_states = inputs_embeds
                 
             for i in range(self.start_layer, self.end_layer):
+                
+                # if kwargs.get("w4a4",False) and (i == 11 or i == 13 or i == 15 or i == 17 or i == 19):
+                #     continue
+                
                 layer = self.layers[i]
                 #hidden_states, residual 
                 # breakpoint()
                 hidden_states= layer(positions, hidden_states,
                                                 kv_caches[i - self.start_layer],
                                                 attn_metadata,**kwargs)
+                # try:
+                #     if torch.isnan(hidden_states).any():
+                #         print("hidden_states has nan")
+                # except:
+                #     breakpoint()
+                
             # need to connect hidden_states and residual
             hidden_states = self.norm(hidden_states)
+            
+            # try:
+            #     if torch.isnan(hidden_states).any():
+            #         print("hidden_states has nan")
+            # except:
+            #     breakpoint()
                 
         return hidden_states
 

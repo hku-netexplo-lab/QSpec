@@ -17,6 +17,7 @@ from vllm.outputs import (ClassificationOutput, ClassificationRequestOutput,
                           ScoringRequestOutput)
 from vllm.pooling_params import PoolingParams
 from vllm.sampling_params import SamplingParams
+from .conversation import get_conv_template_name, get_conv_template
 
 from .version import __version__, __version_tuple__
 

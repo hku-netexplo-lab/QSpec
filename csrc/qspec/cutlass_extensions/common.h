@@ -9,7 +9,7 @@
                 " : Got CUTLASS error: ", cutlassGetStatusString(status));     \
   }
 
-namespace torchao {
+namespace vllm {
 
 template <typename Kernel>
 struct enable_2x_kernel_for_sm80_or_later : Kernel {

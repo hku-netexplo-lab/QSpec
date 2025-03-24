@@ -1,6 +1,7 @@
 import torch
 from qserve_backend import layernorm_ops
 import quarot
+# from . import funtional
 class RMSNorm(torch.nn.Module):
     """
     This class implements the Root Mean Square Normalization (RMSN) layer.
@@ -61,10 +62,18 @@ class RMSNorm(torch.nn.Module):
         # breakpoint()
         return quarot.PackedQuantizedTensor(out_q, scaling_factor)
 
-    def unfuse_forward(self, x: torch.Tensor) -> torch.Tensor:
-        input_dtype = x.dtype
-        if x.dtype == torch.float16:
-            x = x.to(torch.float32)
-        variance = x.pow(2).sum(-1, keepdim=True) / self.mean_dim
-        x = x * torch.rsqrt(variance + self.eps)
-        return x.to(input_dtype)
+    def unfuse_forward(self, x: torch.Tensor, out = None) -> torch.Tensor:
+        # input_dtype = x.dtype
+        # if x.dtype == torch.float16:
+        #     x = x.to(torch.float32)
+        # variance = x.pow(2).sum(-1, keepdim=True) / self.mean_dim
+        # x = x * torch.rsqrt(variance + self.eps)
+        # return x.to(input_dtype)
+        if out is None:
+            out = torch.empty_like(x)
+        layernorm_ops.rms_norm_general_fuse_sum_fp16(
+            out,
+            x,
+            self.eps,
+        )
+        return out

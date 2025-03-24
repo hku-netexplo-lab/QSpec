@@ -382,7 +382,12 @@ class LocalOrDistributedWorkerBase(WorkerBase):
         """Executes at least one model step on the given sequences, unless no
         sequences are provided."""
         start_time = time.perf_counter()
-        # breakpoint()
+        count = 0
+        # for seq in execute_model_req.seq_group_metadata_list:
+        #     if seq.is_prompt:
+        #         count += 1  
+        # if count > 0:
+        #     print(f"Prompt count: {count}, seq num: {len(execute_model_req.seq_group_metadata_list)}")
         inputs = self.prepare_input(execute_model_req)
         if inputs is None:
             return None

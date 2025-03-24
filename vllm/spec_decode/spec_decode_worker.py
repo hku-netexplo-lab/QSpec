@@ -535,9 +535,10 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
             disable_all_speculation, execute_model_req.seq_group_metadata_list)
 
         if no_spec:
+            # print(f"the length of execute_model_req.seq_group_metadata_list is {len(execute_model_req.seq_group_metadata_list)}")
             return self._run_no_spec(execute_model_req,
                                      skip_proposer=disable_all_speculation)
-            
+        # breakpoint()    
         return self._run_speculative_decoding_step(execute_model_req,
                                                    num_lookahead_slots)
 
@@ -764,18 +765,18 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         # so that backend gets prefill|decode.
         assert num_lookahead_slots == execute_model_req.num_lookahead_slots
         
-        print("Start profiling")
-        prof1 = torch.profiler.profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
-        record_shapes=True,
-        profile_memory=False,
-        with_stack=True,
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('/workspace/qspec/v1/QuaRot/e2e/log_quantized'),
-        )
-        prof1.start()    
+        # print("Start profiling")
+        # prof1 = torch.profiler.profile(
+        # activities=[
+        #     torch.profiler.ProfilerActivity.CPU,
+        #     torch.profiler.ProfilerActivity.CUDA,
+        # ],
+        # record_shapes=True,
+        # profile_memory=False,
+        # with_stack=True,
+        # on_trace_ready=torch.profiler.tensorboard_trace_handler('/workspace/qspec/v1/QuaRot/e2e/log_quantized'),
+        # )
+        # prof1.start()    
         
 
         # Pass last hidden states from target model to proposer
@@ -812,16 +813,18 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
             idx for idx in non_spec_indices
             if execute_model_req.seq_group_metadata_list[idx].is_prompt
         ]
-        if len(non_spec_indices):
-            all_hidden_states = proposal_scores.hidden_states
-            # TODO fix `return_hidden_states`, same as in `_run_no_spec`
-            if all_hidden_states is not None:
-                prefill_hidden_states = all_hidden_states[non_spec_indices]
-                execute_model_req.previous_hidden_states = \
-                    prepare_prefill_hidden_states(prefill_hidden_states)
-            # Sync proposer KV cache for prefills.
-            prefill_req = execute_model_req.clone(non_spec_seqs)
-            self.proposer_worker.execute_model(prefill_req)
+        
+        # if len(non_spec_indices):
+        #     # breakpoint()
+        #     all_hidden_states = proposal_scores.hidden_states
+        #     # TODO fix `return_hidden_states`, same as in `_run_no_spec`
+        #     if all_hidden_states is not None:
+        #         prefill_hidden_states = all_hidden_states[non_spec_indices]
+        #         execute_model_req.previous_hidden_states = \
+        #             prepare_prefill_hidden_states(prefill_hidden_states)
+        #     # Sync proposer KV cache for prefills.
+        #     prefill_req = execute_model_req.clone(non_spec_seqs)
+        #     self.proposer_worker.execute_model(prefill_req)
 
         with Timer() as verification_timer:
             accepted_token_ids, target_logprobs = self._verify_tokens(
@@ -832,8 +835,8 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                        scoring_timer.elapsed_time_ms,
                        verification_timer.elapsed_time_ms)
 
-        prof1.stop()
-        print("profiling finished")
+        # prof1.stop()
+        # print("profiling finished")
         
         return self._create_output_sampler_list(
             execute_model_req.seq_group_metadata_list,

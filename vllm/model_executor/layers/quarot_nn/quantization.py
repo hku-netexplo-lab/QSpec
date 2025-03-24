@@ -1,6 +1,6 @@
 import quarot
 import torch
-
+# from . import funtional
 class Quantizer(torch.nn.Module):
     def __init__(self, input_clip_ratio=1.0,**kwargs):
         super().__init__()

@@ -1,5 +1,6 @@
 import quarot
 import torch
+# from . import functional
 
 
 class OnlineHadamard(torch.nn.Module):

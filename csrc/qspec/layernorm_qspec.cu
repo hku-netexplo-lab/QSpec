@@ -7,7 +7,9 @@
 //   year={2024}
 // }
 #include <ATen/cuda/CUDAContext.h>
-#include <torch/extension.h>
+// #include <torch/extension.h>
+#include <c10/cuda/CUDAGuard.h>
+#include "core/registration.h"
 
 #include "dispatch_utils.h"
 #include "utils.cuh"
@@ -644,7 +646,7 @@ void rms_norm_general_qspec(torch::Tensor &out,    // [..., hidden_size]
   });
 }
 
-void rms_norm_general_fuse_sum_qspec(torch::Tensor &out,    // [..., hidden_size]
+void rms_norm_general_fuse_sum_qserve(torch::Tensor &out,    // [..., hidden_size]
               torch::Tensor &input,  // [..., hidden_size]
               torch::Tensor &weight, // [hidden_size]
               torch::Tensor &input_sum, // [tokens] or [1]
@@ -748,7 +750,7 @@ void rms_norm_general_fuse_sum_i4(torch::Tensor &out,    // [..., hidden_size]
             //   torch::Tensor &weight, // [hidden_size]
               torch::Tensor &input_sum, // [tokens] or [1]
               torch::Tensor &scaling, // [tokens] or [1]
-              float epsilon,
+              double epsilon,
               bool use_per_token_quant) {
   int hidden_size = input.size(-1);
   int num_tokens = input.numel() / hidden_size;
@@ -767,7 +769,7 @@ void rms_norm_general_fuse_sum_i4(torch::Tensor &out,    // [..., hidden_size]
         // reinterpret_cast<T*>(weight.data_ptr<scalar_t>()), 
         nullptr,
         nullptr, epsilon, num_tokens, hidden_size, input_sum.data_ptr<at::Half>(), nullptr, scaling.data_ptr<at::Half>(),
-        out.data_ptr<int8_t>(), true
+        out.data_ptr<int8_t>(), false
       );
       // input, gamma, beta, normed_output, eps, tokens, hidden_dim, per_tensor_scale, per_token_scale
       // normed_output_quant, use_shmem
@@ -781,39 +783,40 @@ void rms_norm_general_fuse_sum_i4(torch::Tensor &out,    // [..., hidden_size]
 
 }
 
-
-void rms_norm_general_fuse_sum_fp16(torch::Tensor &out,    // [..., hidden_size]
-    torch::Tensor &input,  // [..., hidden_size]
-  //   torch::Tensor &weight, // [hidden_size]
+void rms_norm_general_fuse_sum_fp16(
+    torch::Tensor& out,    // [..., hidden_size]
+    torch::Tensor& input,  // [..., hidden_size]
+                           //   torch::Tensor &weight, // [hidden_size]
     // torch::Tensor &input_sum, // [tokens] or [1]
     // torch::Tensor &scaling, // [tokens] or [1]
-    float epsilon,
-    // bool use_per_token_quant
-
+    double epsilon
 ) {
-int hidden_size = input.size(-1);
-int num_tokens = input.numel() / hidden_size;
-dim3 grid(num_tokens);
-dim3 block(std::min(hidden_size, 1024));
-block.x = 32 * ((block.x + 31) / 32);
-bool use_per_token_quant = False;
+  int hidden_size = input.size(-1);
+  int num_tokens = input.numel() / hidden_size;
+  dim3 grid(num_tokens);
+  dim3 block(std::min(hidden_size, 1024));
+  block.x = 32 * ((block.x + 31) / 32);
 
-const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
-VLLM_DISPATCH_FLOATING_TYPES(input.scalar_type(), "generalLayerNorm_fuse_sum_i4", [&] {
-using T = typename FloatTypeConverter<scalar_t>::Type;
+  VLLM_DISPATCH_FLOATING_TYPES(
+      input.scalar_type(), "generalLayerNorm_fuse_sum_i4", [&] {
+        using T = typename FloatTypeConverter<scalar_t>::Type;
 
-int shared_mem_size = block.x  * sizeof(T);
-vllm::generalLayerNorm_fuse_sum_i4<T, at::Half><<<grid, block, shared_mem_size, stream>>>(
-reinterpret_cast<T*>(input.data_ptr<scalar_t>()), 
-// reinterpret_cast<T*>(weight.data_ptr<scalar_t>()), 
-reinterpret_cast<T*>(out.data_ptr<scalar_t>()),
-nullptr, epsilon, num_tokens, hidden_size, nullptr, nullptr, nullptr,
-nullptr, true
-);
-
-
-});
-
-
+        int shared_mem_size = block.x * sizeof(T);
+        vllm::generalLayerNorm_fuse_sum_i4<T, at::Half>
+            <<<grid, block, shared_mem_size, stream>>>(
+                reinterpret_cast<T*>(input.data_ptr<scalar_t>()),
+                // reinterpret_cast<T*>(weight.data_ptr<scalar_t>()),
+                nullptr, reinterpret_cast<T*>(out.data_ptr<scalar_t>()),
+                epsilon, num_tokens, hidden_size, nullptr, nullptr, nullptr,
+                nullptr, false);
+      });
 }
+
+
+// TORCH_LIBRARY_IMPL_EXPAND(TORCH_EXTENSION_NAME, CUDA, m) {
+//     m.impl("rms_norm_general_fuse_sum_fp16", &rms_norm_general_fuse_sum_fp16);
+//     m.impl("rms_norm_general_fuse_sum_i4", &rms_norm_general_fuse_sum_i4);
+//   }
+  

@@ -34,6 +34,21 @@ else:
         from torch.library import impl_abstract as register_fake
 
 
+
+# qspec
+def rms_norm_general_fuse_sum_i4(
+    out_q: torch.Tensor,
+    input: torch.Tensor,
+    input_sum: torch.Tensor,
+    scaling_factor: torch.Tensor,
+    epsilon: float,
+    use_per_token_quant: bool
+) -> None:
+    torch.ops._C.rms_norm_general_fuse_sum_i4(
+        out_q, input, input_sum, scaling_factor, epsilon, use_per_token_quant)
+    
+
+
 # page attention ops
 def paged_attention_v1(
     out: torch.Tensor,

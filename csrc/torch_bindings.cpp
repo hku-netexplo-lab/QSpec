@@ -108,19 +108,6 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, ops) {
       "()");
   ops.impl("rms_norm", torch::kCUDA, &rms_norm);
 
-  // qspec
-  ops.def(
-        "qspec_gemm(Tensor x, Tensor x_scale, Tensor q_weight, Tensor w_scale, Tensor bias, Tensor output_scale) -> Tensor");
-  ops.impl("qspec_gemm", torch::kCUDA, &rowwise_scaled_linear_cutlass_s4s4_unified);
-
-  ops.def(
-        "qspec_norm_i4(Tensor out, Tensor input, Tensor input_sum, Tensor scaling, float epsilon, bool use_per_token_quant) -> ()");
-  ops.impl("qspec_norm_i4", torch::kCUDA, &rms_norm_general_fuse_sum_i4);
-
-
-  ops.def(
-        "qspec_norm_fp16(Tensor out, Tensor input, float epsilon) -> ()");
-  ops.impl("qspec_norm_fp16", torch::kCUDA, &rms_norm_general_fuse_sum_fp16);
 
 
 
@@ -261,6 +248,23 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, ops) {
       "   ScalarType? group_scales_type"
       ") -> Tensor");
   // conditionally compiled so impl registration is in source file
+
+//   // QSpec
+//   ops.def(
+//       "rms_norm_general_fuse_sum_fp16(Tensor out, Tensor input, double epsilon) "
+//         "-> ()");
+//   ops.impl("rms_norm_general_fuse_sum_fp16", torch::kCUDA,
+//            &rms_norm_general_fuse_sum_fp16);
+//   ops.def(
+//       "rms_norm_general_fuse_sum_i4(Tensor out, Tensor input, Tensor input_sum, Tensor scaling, double epsilon, bool use_per_token_quant) "
+//         "-> ()");
+//   ops.impl("rms_norm_general_fuse_sum_i4", torch::kCUDA,
+//            &rms_norm_general_fuse_sum_i4);  
+//   ops.def(
+//       "rowwise_scaled_linear_cutlass_s4s4_unified(Tensor xq, Tensor x_scale, Tensor wq, Tensor w_scale, Tensor bias, Tensor output) "
+//         "-> Tensor");
+//   ops.impl("rowwise_scaled_linear_cutlass_s4s4_unified", torch::kCUDA,
+//             &rowwise_scaled_linear_cutlass_s4s4_unified);
 
   ops.def("permute_cols(Tensor A, Tensor perm) -> Tensor");
   ops.impl("permute_cols", torch::kCUDA, &permute_cols);

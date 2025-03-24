@@ -1,15 +1,15 @@
 #include <torch/library.h>
-
-#include "rowwise_scaled_linear_cutlass.cuh"
-
+#include "core/registration.h"
 #include "rowwise_scaled_linear_cutlass_unified.cuh"
 
-namespace vllm {
+
+
+
 
 at::Tensor
-rowwise_scaled_linear_cutlass_s4s4(
+rowwise_scaled_linear_cutlass_s4s4_unified(
     const at::Tensor& xq, const at::Tensor& x_scale, const at::Tensor& wq,
-    const at::Tensor& w_scale, const at::Tensor& bias) {
+    const at::Tensor& w_scale, const at::Tensor& bias, at::Tensor& output) {
   // Validate input datatypes.
   TORCH_CHECK(xq.dtype() == at::kChar && wq.dtype() == at::kChar,
               __func__, " : The input datatypes combination ", xq.dtype(),
@@ -18,29 +18,13 @@ rowwise_scaled_linear_cutlass_s4s4(
   // Dispatch to appropriate kernel template.
   using ElementA = cutlass::int4b_t;
   using ElementB = cutlass::int4b_t;
-  return rowwise_scaled_linear_cutlass<ElementA, ElementB>(
-      xq, x_scale, wq, w_scale, bias);
+  return vllm::rowwise_scaled_linear_cutlass_unified<ElementA, ElementB>(
+      xq, x_scale, wq, w_scale, bias, output);
+
 }
 
 
 
-// at::Tensor
-// rowwise_scaled_linear_cutlass_awq_unified(
-//     const at::Tensor& xq, const at::Tensor& x_scale, const at::Tensor& wq,
-//     const at::Tensor& w_scale, const at::Tensor& bias, at::Tensor& output) {
-//   // Validate input datatypes.
-
-//   // Dispatch to appropriate kernel template.
-//   using ElementA = cutlass::half_t;
-//   using ElementB = cutlass::int4b_t;
-//   return rowwise_scaled_linear_cutlass_unified<ElementA, ElementB>(
-//       xq, x_scale, wq, w_scale, bias, output);
+// TORCH_LIBRARY_IMPL_EXPAND(TORCH_EXTENSION_NAME, CUDA, m) {
+//   m.impl("rowwise_scaled_linear_cutlass_s4s4_unified",&rowwise_scaled_linear_cutlass_s4s4_unified);
 // }
-
-
-//rowwise_scaled_linear_cutlass_unified
-
-
-
-
-}  // namespace torchao

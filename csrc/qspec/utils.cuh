@@ -6,7 +6,8 @@
 #include <stdint.h>
 #include <float.h>
 #include <type_traits>
-#include <torch/extension.h>
+// #include <torch/extension.h>
+#define ENABLE_BF16 1
 
 template <typename T>
 struct FloatTypeConverter
@@ -34,6 +35,7 @@ struct FloatTypeConverter<float>
 
 
 
+
 template<typename T> struct num_elems;
 template <>          struct num_elems<float>           { static constexpr int value = 1; };
 template <>          struct num_elems<float2>          { static constexpr int value = 2; };
@@ -44,10 +46,10 @@ template <>          struct num_elems<half2>           { static constexpr int va
 template <>          struct num_elems<__nv_bfloat16>   { static constexpr int value = 1; };
 template <>          struct num_elems<__nv_bfloat162>  { static constexpr int value = 2; };
 #endif
-#ifdef ENABLE_FP8
-template <>          struct num_elems<__nv_fp8_e4m3>   { static constexpr int value = 1; };
-template <>          struct num_elems<__nv_fp8x2_e4m3>  { static constexpr int value = 2; };
-#endif
+// #ifdef ENABLE_FP8
+// template <>          struct num_elems<__nv_fp8_e4m3>   { static constexpr int value = 1; };
+// template <>          struct num_elems<__nv_fp8x2_e4m3>  { static constexpr int value = 2; };
+// #endif
 
 template<typename T, int num> struct packed_as;
 template<typename T>          struct packed_as<T, 1>              { using type = T; };
@@ -61,12 +63,12 @@ template<>                    struct packed_as<float2, 1>         { using type =
 template<> struct packed_as<__nv_bfloat16,  2> { using type = __nv_bfloat162; };
 template<> struct packed_as<__nv_bfloat162, 1> { using type = __nv_bfloat16;  };
 #endif
-#ifdef ENABLE_FP8
-template<> struct packed_as<__nv_fp8_e4m3,  2> { using type = __nv_fp8x2_e4m3; };
-template<> struct packed_as<__nv_fp8x2_e4m3, 1> { using type = __nv_fp8_e4m3;  };
-template<> struct packed_as<__nv_fp8_e5m2,  2> { using type = __nv_fp8x2_e5m2; };
-template<> struct packed_as<__nv_fp8x2_e5m2, 1> { using type = __nv_fp8_e5m2;  };
-#endif
+// #ifdef ENABLE_FP8
+// template<> struct packed_as<__nv_fp8_e4m3,  2> { using type = __nv_fp8x2_e4m3; };
+// template<> struct packed_as<__nv_fp8x2_e4m3, 1> { using type = __nv_fp8_e4m3;  };
+// template<> struct packed_as<__nv_fp8_e5m2,  2> { using type = __nv_fp8x2_e5m2; };
+// template<> struct packed_as<__nv_fp8x2_e5m2, 1> { using type = __nv_fp8_e5m2;  };
+// #endif
 
 inline __device__ float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
 inline __device__ float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }

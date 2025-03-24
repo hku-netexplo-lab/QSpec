@@ -144,7 +144,7 @@ class ModelInputForGPU(ModelRunnerInputBase):
 @dataclass(frozen=True)
 class ModelInputForGPUWithSamplingMetadata(ModelInputForGPU):
     """
-    Used by the ModelRunner.
+    Used by the ModelRunner. 
     """
     sampling_metadata: Optional["SamplingMetadata"] = None
     # Used for speculative decoding. We do not broadcast it because it is only
@@ -1101,7 +1101,7 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         else:
             with DeviceMemoryProfiler() as m:
                 
-                if "QuaRot" in self.model_config.model:
+                if "qspec" in self.model_config.model.lower():
                     import transformers
                     from vllm.model_executor.layers.quarot_nn.linear import get_matmul_op_w4a16
                     with transformers.modeling_utils.no_init_weights(): 
@@ -1130,8 +1130,8 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
                             
                             self.model = quarot_llama.QuarotLlamaForCausalLM(config=self.model_config.hf_config, vllm_config=self.vllm_config,**kwargs)
                             from safetensors.torch import load_file
-                            weight_path = "/workspace/qspec/models/QuaRot/L3/model-00001-of-00002.safetensors"
-                            weight_path2 = "/workspace/qspec/models/QuaRot/L3/model-00002-of-00002.safetensors"
+                            weight_path = self.model_config.model+"/model-00001-of-00002.safetensors"
+                            weight_path2 = self.model_config.model+"/model-00002-of-00002.safetensors"
                             state_dict = load_file(weight_path)
                             state_dict2 = load_file(weight_path2)
                             # merge the two state_dicts into one

@@ -717,17 +717,18 @@ class FlashAttentionImpl(AttentionImpl):
                     layer._v_scale,
                 )
                 
-        if not attn_metadata.qspec:
+        # if not attn_metadata.qspec:
+            
             # breakpoint()
-            (num_prefill_query_tokens, num_prefill_kv_tokens, num_decode_query_tokens) = \
-            get_num_prefill_decode_query_kv_tokens(attn_metadata, attn_type)
-            decode_query = query[num_prefill_query_tokens:]
-            decode_output = output[num_prefill_query_tokens:]
-            # QKV for prefill.
-            query = query[:num_prefill_query_tokens]
-            prefill_output = output[:num_prefill_query_tokens]
-            assert query.shape[0] == num_prefill_query_tokens
-            assert decode_query.shape[0] == num_decode_query_tokens
+        (num_prefill_query_tokens, num_prefill_kv_tokens, num_decode_query_tokens) = \
+        get_num_prefill_decode_query_kv_tokens(attn_metadata, attn_type)
+        decode_query = query[num_prefill_query_tokens:]
+        decode_output = output[num_prefill_query_tokens:]
+        # QKV for prefill.
+        query = query[:num_prefill_query_tokens]
+        prefill_output = output[:num_prefill_query_tokens]
+        assert query.shape[0] == num_prefill_query_tokens
+        assert decode_query.shape[0] == num_decode_query_tokens
 
 
         if prefill_meta := attn_metadata.prefill_metadata:
@@ -786,9 +787,10 @@ class FlashAttentionImpl(AttentionImpl):
             # Use flash_attn_varlen_func kernel for speculative decoding
             # because different queries might have different lengths.
             # breakpoint()
-            if attn_metadata.qspec:
-                decode_query = query
-                decode_output = output
+            
+            # if attn_metadata.qspec:
+            #     decode_query = query
+            #     decode_output = output
                 
                 
             assert decode_meta.max_decode_query_len is not None

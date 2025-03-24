@@ -53,26 +53,25 @@ void paged_attention_v2(
 void rms_norm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& weight,
               double epsilon);
 
-//qspec
-void rms_norm_general_fuse_sum_i4(torch::Tensor &out,    // [..., hidden_size]
-    torch::Tensor &input,  // [..., hidden_size]
-  //   torch::Tensor &weight, // [hidden_size]
-    torch::Tensor &input_sum, // [tokens] or [1]
-    torch::Tensor &scaling, // [tokens] or [1]
-    float epsilon,
-    bool use_per_token_quant)
+// //qspec
+// void rms_norm_general_fuse_sum_i4(torch::Tensor &out,    // [..., hidden_size]
+//     torch::Tensor &input,  // [..., hidden_size]
+//   //   torch::Tensor &weight, // [hidden_size]
+//     torch::Tensor &input_sum, // [tokens] or [1]
+//     torch::Tensor &scaling, // [tokens] or [1]
+//     double epsilon,
+//     bool use_per_token_quant);
 
 
-at::Tensor
-rowwise_scaled_linear_cutlass_s4s4_unified(
-    const at::Tensor& xq, const at::Tensor& x_scale, const at::Tensor& wq,
-    const at::Tensor& w_scale, const at::Tensor& bias, at::Tensor& output)
+// torch::Tensor rowwise_scaled_linear_cutlass_s4s4_unified(
+//     const at::Tensor& xq, const at::Tensor& x_scale, const at::Tensor& wq,
+//     const at::Tensor& w_scale, const at::Tensor& bias, at::Tensor& output);
 
 
-void rms_norm_general_fuse_sum_fp16(torch::Tensor &out, 
-    torch::Tensor &input,  
-    float epsilon
-)
+// void rms_norm_general_fuse_sum_fp16(torch::Tensor &out, 
+//     torch::Tensor &input,  
+//     double epsilon
+// );
 
 //end of qspec 
 
