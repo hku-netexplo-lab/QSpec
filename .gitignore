@@ -15,7 +15,6 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
-models/
 third_party/cutlass/
 cmake-build-*/
 CMakeUserPresets.json

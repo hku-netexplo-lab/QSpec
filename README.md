@@ -3,7 +3,7 @@ This is the official implementation of the QSpec: Speculative Decoding with Comp
 
 ## Installation
 ! Highly recommended to use a **virtual** environment and **a Docker container** for the installation and tests. !
-1. Clone the repository
+1. Clone the repository, and login to Huggingface by CLI.
 2. CUDA 12.5 and python 3.10 are required.
 3. GLIBCXX_3.4.30 is required. If you are using a system with an older version of GLIBCXX, you can use the following command to install the required version. ``` conda install -c conda-forge libstdcxx-ng ```
 
@@ -24,14 +24,14 @@ trust_remote_code=True,enforce_eager=True --tasks tinyGSM8k
 ```
 3. Users can use demo.py to check the throughput of QSpec on their own machine.
 ```bash
- python demo.py --model PATH-TO-QSPEC-MODEL     --speculative_model PATH-TO-QSPEC-MODEL(Same as the former)      --num-speculative-tokens 3     --trust_remote_code --enforce_eager
+ python demo.py --model models/L3_8B_Instruct_QSpec    --speculative_model models/L3_8B_Instruct_QSpec      --num-speculative-tokens 3     --trust_remote_code --enforce_eager --max_num_seqs 32
 ```
 4. Users can try other counterparts like EAGLE or N-gram etc. by changing the model name in the above commands.
 ```bash
  python demo.py --model models/Meta-Llama-3-8B-Instruct(target model) \
     --speculative_model PATH-TO-EAGLE \
     --num-speculative-tokens 3 \
-    --trust_remote_code --enforce_eager
+    --trust_remote_code --enforce_eager --max_num_seqs 32
 ```
 
 

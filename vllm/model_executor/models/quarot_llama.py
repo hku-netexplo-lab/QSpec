@@ -228,11 +228,11 @@ class QuarotLlamaAttention(LlamaAttention):
         attn_output = self.attn(query_states, key_states, value_states, kv_cache, attn_metadata,act_buffer_attn).view(-1, self.num_heads, self.head_dim)
 
 
-        try:
-            if torch.isnan(query_states).any():
-                print("hidden_states has nan")
-        except:
-            breakpoint()
+        # try:
+        #     if torch.isnan(query_states).any():
+        #         print("hidden_states has nan")
+        # except:
+        #     breakpoint()
 
         # for spec-decode as draft model ------------------
         # attn_output = attn_output.to(torch.float16)
@@ -243,20 +243,20 @@ class QuarotLlamaAttention(LlamaAttention):
         act_buffer_had = kwargs.get("act_buffer_had",None)
         # act_buffer_had = None
         attn_output = self.o_proj_hadamard(attn_output.transpose(-1, -2).reshape(-1,self.num_heads) , act_buffer_had)
-        try:
-            if torch.isnan(attn_output).any():
-                print("hidden_states has nan")
-        except Exception as e:
-            print(e)
-            breakpoint()
+        # try:
+        #     if torch.isnan(attn_output).any():
+        #         print("hidden_states has nan")
+        # except Exception as e:
+        #     print(e)
+        #     breakpoint()
             
         attn_output = attn_output.view(-1, self.head_dim, self.num_heads).transpose(-1, -2)
         
-        try:
-            if torch.isnan(attn_output).any():
-                print("hidden_states has nan")
-        except:
-            breakpoint()
+        # try:
+        #     if torch.isnan(attn_output).any():
+        #         print("hidden_states has nan")
+        # except:
+        #     breakpoint()
         
         attn_output = attn_output.reshape(bsz * q_len, self.hidden_size).contiguous()
         

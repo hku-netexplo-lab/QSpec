@@ -56,7 +56,7 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
     prompts = []
     i = 0
     len_dataset = len(dataset)-1
-    num_prompts = 256
+    num_prompts = 2048
     import random
     from vllm import get_conv_template_name, get_conv_template
 
