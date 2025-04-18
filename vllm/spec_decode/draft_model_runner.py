@@ -275,7 +275,7 @@ class TP1DraftModelRunner(ModelRunnerWrapperBase):
                 if previous_hidden_states is not None else {}
             
             if w4a4: # TODO the buffers can be resued for the whole loop
-                kwargs["w4a4"] = w4a4
+                kwargs["w4a4"] = False
                 seq_len = model_input.input_tokens.shape[0]
                 num_heads = self.model_config.hf_config.num_attention_heads
                 num_kv_heads = self.model_config.hf_config.num_key_value_heads

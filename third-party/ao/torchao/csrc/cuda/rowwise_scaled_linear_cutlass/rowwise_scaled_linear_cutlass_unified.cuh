@@ -5,10 +5,9 @@
 #include <ATen/cuda/CUDAUtils.h>
 #include <c10/util/Exception.h>
 
-#if defined(TORCHAO_USE_CUTLASS) && !defined(_WIN32) &&                   \
-    defined(CUDA_VERSION) && (CUDA_VERSION >= 11080)
+
 #define BUILD_ROWWISE_SCALED_LINEAR_CUTLASS
-#endif
+
 
 #if defined(BUILD_ROWWISE_SCALED_LINEAR_CUTLASS)
 #include <cutlass/gemm/device/gemm_universal.h>

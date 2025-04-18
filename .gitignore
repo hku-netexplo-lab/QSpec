@@ -12,6 +12,13 @@ __pycache__/
 # C extensions
 *.so
 
+/a_test
+/logs
+/models
+*nsys-*
+*ncu*
+*sqlite
+
 # Distribution / packaging
 .Python
 build/

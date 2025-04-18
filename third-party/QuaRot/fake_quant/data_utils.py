@@ -14,7 +14,9 @@ def get_wikitext2(nsamples, seed, seqlen, model, hf_token, eval_mode=False):
         testenc = tokenizer("\n\n".join(testdata['text']), return_tensors='pt')
         return testenc
     else:
-        traindata = datasets.load_dataset('wikitext', 'wikitext-2-raw-v1', split='train')
+        breakpoint()
+        # traindata = datasets.load_dataset('wikitext', 'wikitext-2-raw-v1', split='train')
+        traindata = datasets.load_dataset("mit-han-lab/pile-val-backup", split="validation")[:10000]
         trainenc = tokenizer("\n\n".join(traindata['text']), return_tensors='pt')    
         random.seed(seed)
         trainloader = []

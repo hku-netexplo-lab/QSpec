@@ -93,33 +93,19 @@ def random_hadamard_matrix(size, device):
 
 def opt_matmul_hadU_cuda(X, hadK, K, out = None, scale = None):
     n = X.shape[-1]
-    # breakpoint()
-    
-    if X.dim() == 1:
-        X = X.unsqueeze(0)
-        
     if K == 1:
         if out is None:
             out = torch.empty_like(X)
         if not X.is_contiguous():
             X = X.contiguous()
-        out = fast_hadamard_transform_cuda.faster_fast_hadamard_transform(X, scale, out )
-        # ref = fast_hadamard_transform.hadamard_transform(X.contiguous(), 1.0/torch.tensor(n).sqrt()) 
-        # if not torch.allclose(out, ref):
-        #     print("Error in opt_matmul_hadU_cuda")
-        #     breakpoint()
+        out = fast_hadamard_transform_cuda.faster_fast_hadamard_transform(X, scale, out)
         return out
 
     X = X.view(-1,  n // K)
     if out is None:
         out = torch.empty_like(X)
     out = fast_hadamard_transform_cuda.faster_fast_hadamard_transform(X, scale, out)
-    # ref = fast_hadamard_transform.hadamard_transform(X.contiguous(), 1.0/torch.tensor(n).sqrt())
-    # if not torch.allclose(out, ref):
-    #     print("Error in opt_matmul_hadU_cuda")
-    #     breakpoint()
     out = hadK @ out.view(-1, K, n // K)
-    # breakpoint()
     return out #.reshape(X.shape)
 
 

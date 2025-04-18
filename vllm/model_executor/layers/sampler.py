@@ -290,7 +290,7 @@ class Sampler(nn.Module):
             sampling_metadata,
             sampling_tensors,
             include_gpu_probs_tensor=self.include_gpu_probs_tensor,
-            modify_greedy_probs=self._should_modify_greedy_probs_inplace,
+            modify_greedy_probs= False,#self._should_modify_greedy_probs_inplace,
         )
 
         if self.include_gpu_probs_tensor:

@@ -21,7 +21,7 @@ RESET = "\033[0m"
 ```bash
 lm_eval --model vllm --model_args pretrained=PATH-TO-QSPEC-MODEL,\
 speculative_model=PATH-TO-QSPEC-MODEL,num_speculative_tokens=3,\
-trust_remote_code=True,enforce_eager=True --tasks tinyGSM8k
+trust_remote_code=True,enforce_eager=True --tasks tinyGSM8k --trust_remote_code
 ```
 3. Users can use demo.py to check the throughput of QSpec on their own machine.
 ```bash
@@ -46,9 +46,15 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
     import datasets
     sampling_params = SamplingParams(temperature=0.0, top_p=1.0, stop_token_ids=[128001, 128009], max_tokens=1024, stop=["Question:"])
     # start to load dataset
-    dataset = datasets.load_dataset("openai/gsm8k",'main')['train']
-
-    shot_num = 10
+    # dataset = gsm8k
+    # dataset = datasets.load_dataset("openai/gsm8k", "main", split="train")
+    dataset = datasets.load_dataset("allenai/WildChat")["train"]
+    
+    torch.manual_seed(0)
+    torch.cuda.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+    torch.backends.cudnn.deterministic = True
+    shot_num = 0
     prefix = ''
     for i in range(shot_num):
         prefix += 'Question: '+ dataset[i]["question"] + "  Answer: " + dataset[i]["answer"] + '\n'
@@ -59,7 +65,7 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
     num_prompts = 2048
     import random
     from vllm import get_conv_template_name, get_conv_template
-
+    random.seed(0)
     while len(prompts) < min(len_dataset, num_prompts):
         # prompts.append(dataset[i])
         conv_t = get_conv_template_name("Meta-Llama3-8B-Instruct")
@@ -69,8 +75,8 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
         # should_skip = dataset[rand_idx]["toxic"] or dataset[rand_idx]["redacted"]
         # if should_skip:
         #     continue
-        # raw_prompt = dataset[rand_idx]["conversation"][0]["content"]
-        raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["question"] + " Answer: " 
+        raw_prompt = dataset[rand_idx]["conversation"][0]["content"]
+        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["question"] + " Answer: " 
         # raw_prompt = dataset[rand_idx]["context"]
     
 
@@ -146,7 +152,7 @@ def process_requests(engine: LLMEngine,
     print(f"{BG_BLUE}Total requests: {request_id}, finished requests: {finish_count}.{RESET}")
     print(f"{BG_BLUE}Total tokens: {tokens_count}.{RESET}")
     print(f"{BG_BLUE}End to end throughput: {tokens_count / (end - start)} tokens per second.{RESET}")
-    
+    exit(0)
                 
     # end of the engine
                 
@@ -167,7 +173,8 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == '__main__':
-    
+    import multiprocessing as mp
+    mp.set_start_method("spawn")
     # fix all the random seeds
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)

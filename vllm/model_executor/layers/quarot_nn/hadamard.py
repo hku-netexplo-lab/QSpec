@@ -16,15 +16,26 @@ class OnlineHadamard(torch.nn.Module):
             if not self.fp32_had:
                 self.had_rem_dim = self.had_rem_dim.to(torch.float16).cuda()
         else:
-            self.had_rem_dim = None       
+            self.had_rem_dim = None
+            
+        self.qspec = False       
     
     def forward(self, x, out = None, **kwargs):
+        if kwargs.get("w4a4", False):
+            self.qspec = True
+            
         x_dtype = x.dtype
         if self.fp32_had:
             x = x.float()
         if self.rem_dim==1:
-            return quarot.functional.opt_matmul_hadU_cuda(x, self.had_rem_dim, self.rem_dim,out = out,scale = self.scale_32)
-        
-        x = quarot.functional.opt_matmul_hadU_cuda(x, self.had_rem_dim, self.rem_dim,out = out,scale = self.scale_14336)
+            if self.qspec:
+                return quarot.functional.opt_matmul_hadU_cuda(x, self.had_rem_dim, self.rem_dim,out = out,scale = self.scale_32)
+            else:
+                return quarot.functional.matmul_hadU_cuda(x, self.had_rem_dim, self.rem_dim,out = out,scale = self.scale_32)
+
+        if self.qspec:
+            x = quarot.functional.opt_matmul_hadU_cuda(x, self.had_rem_dim, self.rem_dim,out = out,scale = self.scale_14336)
+        else:
+            x = quarot.functional.matmul_hadU_cuda(x, self.had_rem_dim, self.rem_dim,out = out,scale = self.scale_14336)
         x = x.to(x_dtype)
         return x

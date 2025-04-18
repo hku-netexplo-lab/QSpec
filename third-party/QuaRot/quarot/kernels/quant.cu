@@ -1,5 +1,5 @@
 #include <quant.h>
-
+#include <ATen/cuda/CUDAContext.h>
 
 template<typename T>
 __device__ __half int_to_half(T value)
@@ -176,8 +176,10 @@ void rowAbsMaxQuantize(
 
     dim3 grid(m, 1);
     dim3 block(block_size, 1);
+    auto stream = at::cuda::getCurrentCUDAStream();
 
-    rowAbsMaxQuantizeKernel<<<grid, block, block_size * sizeof(half)>>>(
+
+    rowAbsMaxQuantizeKernel<<<grid, block, block_size * sizeof(half), stream.stream()>>>(
         d_mat_ptr, d_scale_ptr, d_out_ptr, m, n, clip_ratio, block_size);
 }
 

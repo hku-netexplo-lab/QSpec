@@ -7,9 +7,9 @@ import numpy as np
 
 
 from e2e.quantized_llama import modeling_llama
-from e2e.checkpoint_utils import data_utils, gptq_utils, rotation_utils
+# from e2e.checkpoint_utils import data_utils, gptq_utils, rotation_utils
 from quarot.functional import pack_i4
-import hadamard_utils, quant_utils
+# import hadamard_utils, quant_utils
 
 def main(args):
     transformers.set_seed(args.seed)
@@ -57,7 +57,7 @@ def main(args):
     
 
     # import quant_utils
-    save_dict = torch.load('../../../models/QuaRot/Llama-3-8b-hf-4b-rotate')
+    save_dict = torch.load('/workspace/qspec/models/Llama-3-8b-hf-4b-qp')
     old_dict = save_dict["model"]
     quantizers_dict = save_dict["w_quantizers"]
     # remove all the '.module' from the keys
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     supported_datasets = ['wikitext2', 'ptb', 'c4']
 
     # General Arguments
-    parser.add_argument('--pretraiend_path_or_name', type=str, default='/workspace/qspec/models/Meta-Llama-3-8B-Instruct',
+    parser.add_argument('--pretraiend_path_or_name', type=str, default='/data/Meta-Llama-3-8B-Instruct',
                         help='Model to load;')
     parser.add_argument('--save_path', type=str, required=True)
     parser.add_argument('--seed', type=int, default=0, help='Random Seed for HuggingFace and PyTorch')

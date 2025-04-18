@@ -207,9 +207,9 @@ class Worker(LocalOrDistributedWorkerBase):
         # shared weight in QSpec paradigm
         # breakpoint()
         avoid_oom_memory = 0
-        # if self.speculative_config is not None:
-        #     avoid_oom_memory = 2 * result.torch_peak_increase
-        #     logger.warning(f"avoid_oom_memory: {avoid_oom_memory / GiB_bytes} GiB, this only need for EAGLE model")
+        if self.speculative_config is not None:
+            avoid_oom_memory = 2 * result.torch_peak_increase
+            logger.warning(f"avoid_oom_memory: {avoid_oom_memory / GiB_bytes} GiB, this only need for Speculative Decoding model")
         
         # if self.model_config.hf_config.model_type == "eagle":
         #     avoid_oom_memory = 2 * result.torch_peak_increase
@@ -262,12 +262,12 @@ class Worker(LocalOrDistributedWorkerBase):
         # GPU did not change their memory usage during the profiling.
         free_gpu_memory, total = torch.cuda.mem_get_info()
         cuda_memory = total - free_gpu_memory
-        assert self.baseline_snapshot.cuda_memory < cuda_memory, (
-            "Error in memory profiling. "
-            f"Initial used memory {self.baseline_snapshot.cuda_memory}, "
-            f"currently used memory {cuda_memory}. "
-            f"This happens when the GPU memory was "
-            "not properly cleaned up before initializing the vLLM instance.")
+        # assert self.baseline_snapshot.cuda_memory < cuda_memory, (
+        #     "Error in memory profiling. "
+        #     f"Initial used memory {self.baseline_snapshot.cuda_memory}, "
+        #     f"currently used memory {cuda_memory}. "
+        #     f"This happens when the GPU memory was "
+        #     "not properly cleaned up before initializing the vLLM instance.")
 
     def initialize_cache(self, num_gpu_blocks: int,
                          num_cpu_blocks: int) -> None:

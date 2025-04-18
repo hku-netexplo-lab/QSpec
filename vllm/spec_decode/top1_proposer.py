@@ -96,7 +96,6 @@ class Top1Proposer(SpeculativeProposer):
             # If no sequences can be speculated, set sampler output to None.
             maybe_sampler_output = None
             transposed = False
-
         # Combine speculative- and non-speculative sequences into the same
         # representation.
         proposal_tokens, proposal_probs, proposal_lens = self._merge_outputs(

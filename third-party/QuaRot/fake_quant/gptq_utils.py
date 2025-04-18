@@ -171,7 +171,9 @@ def gptq_fwrd(model, dataloader, dev, args):
     layers[0] = Catcher(layers[0])
     for batch in dataloader:
         try:
+            # model.cuda()
             model(batch[0].to(dev))
+            # model.cpu()
         except ValueError:
             pass
     layers[0] = layers[0].module

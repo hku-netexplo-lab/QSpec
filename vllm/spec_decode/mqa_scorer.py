@@ -19,6 +19,7 @@ class MQAScorer(SpeculativeScorer):
             get_all_seq_ids(execute_model_req.seq_group_metadata_list)) + 1
         all_proposal_tokens = proposals.proposal_token_ids.tolist()
         all_proposal_lengths = proposals.proposal_lens.tolist()
+        # breakpoint()
         for i, seq_group_metadata in enumerate(
                 execute_model_req.seq_group_metadata_list):
             if all_proposal_lengths[i] == 0:

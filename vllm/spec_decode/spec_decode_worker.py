@@ -45,6 +45,8 @@ from vllm.spec_decode.util import (Timer, create_logprobs_output,
 from vllm.utils import resolve_obj_by_qualname
 from vllm.worker.worker_base import LoraNotSupportedWorkerBase, WorkerBase
 
+import json
+
 logger = init_logger(__name__)
 
 
@@ -320,6 +322,8 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         self.previous_hidden_states: Optional[HiddenStates] = None
         self._disable_logprobs = disable_logprobs
         self._disable_log_stats = disable_log_stats
+        self.output_log = None
+        self.steps = None
 
     def init_device(self) -> None:
         """Initialize both scorer and proposer models.
@@ -331,14 +335,17 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
 
         # NOTE(cade): load_model is not part of the WorkerBase interface.
         self.scorer_worker.load_model()
-        # breakpoint()
-        if self.draft_model_config.hf_config.model_type == "llama_quarot":
-            self.proposer_worker.load_model(self.scorer_worker.model_runner.model)
-            self.proposer_worker.model_runner.vllm_config.compilation_config.static_forward_context = self.scorer_worker.model_runner.vllm_config.compilation_config.static_forward_context
-        else:
-            self.proposer_worker.load_model()
+        
 
-        # breakpoint()
+        # if self.draft_model_config.hf_config.model_type == "llama_quarot":
+        #     self.proposer_worker.load_model(self.scorer_worker.model_runner.model)
+        #     self.proposer_worker.model_runner.vllm_config.compilation_config.static_forward_context = self.scorer_worker.model_runner.vllm_config.compilation_config.static_forward_context
+        # else:
+        #     self.proposer_worker.load_model()
+
+        self.proposer_worker.load_model()
+
+
 
         self._metrics.init_tensors(self.rank, device_type=self.device)
         self.spec_decode_sampler.init_tensors(self.rank,
@@ -425,18 +432,18 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                                             num_cpu_blocks=num_cpu_blocks)
         
         
-        if self.draft_model_config.hf_config.model_type == "llama_quarot":
-            self.proposer_worker.ref_initilize_cache(num_gpu_blocks=num_gpu_blocks,
-                                                 num_cpu_blocks=num_cpu_blocks,
-                                                 cache_engine = self.scorer_worker.cache_engine,
-                                                 gpu_cache = self.scorer_worker.gpu_cache,
-        )
-        else:
-            self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks, num_cpu_blocks=num_cpu_blocks)
+        # if self.draft_model_config.hf_config.model_type == "llama_quarot":
+        #     self.proposer_worker.ref_initilize_cache(num_gpu_blocks=num_gpu_blocks,
+        #                                          num_cpu_blocks=num_cpu_blocks,
+        #                                          cache_engine = self.scorer_worker.cache_engine,
+        #                                          gpu_cache = self.scorer_worker.gpu_cache,
+        # )
+        # else:
+        #     self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks, num_cpu_blocks=num_cpu_blocks)
         #      
         # origin ————————————————————————————————————
-        # self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
-        #                                       num_cpu_blocks=num_cpu_blocks)
+        self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
+                                              num_cpu_blocks=num_cpu_blocks)
         # end of origin ————————————————————————————————————
         
         
@@ -774,7 +781,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         # record_shapes=True,
         # profile_memory=False,
         # with_stack=True,
-        # on_trace_ready=torch.profiler.tensorboard_trace_handler('/workspace/qspec/v1/QuaRot/e2e/log_quantized'),
+        # on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs'),
         # )
         # prof1.start()    
         
@@ -813,6 +820,8 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
             idx for idx in non_spec_indices
             if execute_model_req.seq_group_metadata_list[idx].is_prompt
         ]
+        
+        # --- qspec -> noneed to sync for chunked prefill
         
         # if len(non_spec_indices):
         #     # breakpoint()
@@ -893,7 +902,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                 for idx, sgm in enumerate(seq_group_metadata_list)
                 if sgm.sampling_params.seed is not None
             }
-
+            
         accepted_token_ids = self.spec_decode_sampler(
             target_with_bonus_probs=proposal_verifier_probs,
             bonus_token_ids=bonus_token_ids,
@@ -901,6 +910,32 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
             draft_token_ids=proposal_token_ids,
             **sampler_extra_kwargs,
         )
+        
+        # record each tokens top 10 probs = torch.exp(logprobs), in accepted_token_ids to a json
+        # {
+        #     "probs": top 10 probs,
+        #     "accepted_token_ids": accepted_token_ids, if rejected -1
+        # }
+        # accepted_token_ids
+        # tensor([[791,  -1,  -1,  -1],
+        #         [220,  -1,  -1,  -1]], device='cuda:0')
+        # if self.output_log is None:
+        #     self.output_log = open('./log_probs.jsonl', 'w')
+        # if self.steps is None:
+        #     self.steps = 0
+        # self.steps += 1
+        
+        # json_dict = {}
+        # for i in range(accepted_token_ids.shape[0]):
+        #     json_dict[i] = {}
+        #     for j in range(accepted_token_ids.shape[1]-1):
+        #         top_10_probs = torch.topk(proposal_probs[i][j], 10, dim=-1).values
+        #         json_dict[i][j] = {'token_id': accepted_token_ids[i][j].item(), 'probs': top_10_probs.tolist(), 'step': self.steps, 'i': i, 'j': j}
+        #         self.output_log.write(json.dumps(json_dict[i][j]) + '\n')
+        
+       
+
+       
         # Append output tokens from non-speculative sequences to
         # the accepted token ids tensor.
         non_spec_token_ids = non_spec_token_ids.expand(-1, max_proposal_len +
@@ -927,6 +962,8 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
             self.previous_hidden_states = HiddenStates(
                 hidden_states, seq_group_metadata_list,
                 second_last_token_hidden_states)
+
+            
         return accepted_token_ids, logprobs
 
     def _create_output_sampler_list(

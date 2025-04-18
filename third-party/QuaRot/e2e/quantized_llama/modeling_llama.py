@@ -4,7 +4,7 @@ import quarot.transformers
 import torch
 from transformers import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaAttention, \
-LlamaFlashAttention2, LlamaForCausalLM, apply_rotary_pos_emb, LlamaMLP, LlamaDecoderLayer
+LlamaForCausalLM, apply_rotary_pos_emb, LlamaMLP, LlamaDecoderLayer
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS
 from typing import Optional, Tuple
 from transformers import Cache,DynamicCache
@@ -26,7 +26,7 @@ ALL_LAYERNORM_LAYERS.append(quarot.nn.RMSNorm)
 class QuarotLlamaConfig(LlamaConfig):
     model_type = "llama_quarot"
 
-class QuarotFP16LlamaAttention(LlamaFlashAttention2):
+class QuarotFP16LlamaAttention(LlamaAttention):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -166,6 +166,7 @@ class QuarotLlamaAttention(QuarotFP16LlamaAttention):
         self.k_proj = quarot.nn.Linear4bit.from_float(self.k_proj)
         self.v_proj = quarot.nn.Linear4bit.from_float(self.v_proj)
         self.qkv_proj = None
+        self.num_heads = self.config.num_attention_heads
         self.o_proj_hadamard = quarot.nn.OnlineHadamard(self.num_heads)
         self.o_proj = torch.nn.Sequential(
             quarot.nn.Quantizer(),
