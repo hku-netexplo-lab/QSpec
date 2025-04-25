@@ -5,7 +5,6 @@ import bitblas
 from bitblas import auto_detect_nvidia_target
 from bitblas.cache import global_operator_cache, get_database_path
 # from . import functional
-import nvtx
 from torchao.ops import rowwise_scaled_linear_cutlass_s4s4_unified, rowwise_scaled_linear_cutlass_s4s4
 
 
@@ -82,9 +81,6 @@ class Linear4bit(torch.nn.Module):
     
 
     def forward_w4a16(self, x,C=None):
-        if x.shape[0] >= 32 and x.shape[0] <= 32 * 3 +1:
-            torch.cuda.nvtx.range_push("Start")
-            
         if self.weight_scales.dim() == 2:
             self.weight_scales = self.weight_scales.view(-1)
         if self.weight.dtype != torch.int8:
@@ -94,8 +90,6 @@ class Linear4bit(torch.nn.Module):
             C = torch.empty(x.shape[0], self.weight.shape[0], dtype=torch.float16, device="cuda")
         
         self.a16_matmul(x, self.weight ^ self.mask , output=C, scale = self.weight_scales)
-        if x.shape[0] >= 32 and x.shape[0] <= 32 * 3 +1:
-            torch.cuda.nvtx.range_pop()
         return C
         
         

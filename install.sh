@@ -9,7 +9,10 @@ git clone https://github.com/NVIDIA/cutlass.git
 cd ..
 pip install -e third-party/ao
 pip install -e third-party/fast-hadamard-transform
-pip install -e third-party/kernels
+# pip install flash-attn --no-build-isolation
+cd third-party/kernels
+python setup.py install
+cd ../..
 pip install -e third-party/QuaRot
 echo "QSpec installed"
 CUDA_DEVICE_ORDER=PCI_BUS_ID

@@ -16,26 +16,29 @@ BG_PINK = "\033[45m"
 RESET = "\033[0m"
 
 
+
 '''
+1. Download the QSpec model from Huggingface hub copy the path to the model.
 2. Users can use LmEval to evaluate the model on downstream tasks. 
 ```bash
-lm_eval --model vllm --model_args pretrained=PATH-TO-QSPEC-MODEL,\
+CUDA_DEVICE_ORDER=PCI_BUS_ID lm_eval --model vllm --model_args pretrained=PATH-TO-QSPEC-MODEL,\
 speculative_model=PATH-TO-QSPEC-MODEL,num_speculative_tokens=3,\
 trust_remote_code=True,enforce_eager=True --tasks tinyGSM8k --trust_remote_code
 ```
 3. Users can use demo.py to check the throughput of QSpec on their own machine.
 ```bash
- python demo.py --model PATH-TO-QSPEC-MODEL     --speculative_model PATH-TO-QSPEC-MODEL(Same as the former)      --num-speculative-tokens 3     --trust_remote_code --enforce_eager
+# QSpec
+CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL  --speculative_model PATH-TO-QSPEC-MODEL(Same as the former)      --num-speculative-tokens 3   --max_num_seqs 4  --trust_remote_code --enforce_eager
+CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL  --max_num_seqs 4  --trust_remote_code --enforce_eager 
+# Auto-regressive W4A16 without QSpec (Baseline)
 ```
 4. Users can try other counterparts like EAGLE or N-gram etc. by changing the model name in the above commands.
 ```bash
- python demo.py --model models/Meta-Llama-3-8B-Instruct(target model) \
+CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL \
     --speculative_model PATH-TO-EAGLE \
     --num-speculative-tokens 3 \
     --trust_remote_code --enforce_eager
-```
-
-                
+```             
 '''
 
 def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
@@ -46,12 +49,11 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
     import datasets
     sampling_params = SamplingParams(temperature=0.0, top_p=1.0, stop_token_ids=[128001, 128009], max_tokens=1024, stop=["Question:"])
     # start to load dataset
-    # dataset = gsm8k
-    dataset = datasets.load_dataset("openai/gsm8k", "main", split="train")
-    # dataset = datasets.load_dataset("allenai/WildChat")["train"]
-    # dataset = datasets.load_dataset("Muennighoff/mbpp", "full", split="test")
-    # dataset = datasets.load_dataset("philschmid/mt-bench", split="train")
-    # dataset = datasets.load_dataset("hendrydong/gpqa_diamond",split="test")
+    dataset = datasets.load_dataset("openai/gsm8k", "main", split="train") # gsm8k
+    # dataset = datasets.load_dataset("allenai/WildChat")["train"] # wildchat
+    # dataset = datasets.load_dataset("Muennighoff/mbpp", "full", split="test") # mbpp
+    # dataset = datasets.load_dataset("philschmid/mt-bench", split="train") # mt-bench
+    # dataset = datasets.load_dataset("hendrydong/gpqa_diamond",split="test") # diamond
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
     torch.cuda.manual_seed_all(0)
@@ -59,9 +61,9 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
     shot_num = 5
     prefix = ''
     for i in range(shot_num):
-        prefix += 'Question: '+ dataset[i]["question"] + "  Answer: " + dataset[i]["answer"] + '\n'
-        # prefix += 'Question: '+ dataset[i]["text"] + "  Answer: " + dataset[i]["code"] + '\n'
-        # prefix += 'Question: '+ dataset[i]["problem"] + "  Answer: " + dataset[i]["solution"] + '\n'
+        prefix += 'Question: '+ dataset[i]["question"] + "  Answer: " + dataset[i]["answer"] + '\n' # gsm8k
+        # prefix += 'Question: '+ dataset[i]["text"] + "  Answer: " + dataset[i]["code"] + '\n' # mbpp
+        # prefix += 'Question: '+ dataset[i]["problem"] + "  Answer: " + dataset[i]["solution"] + '\n' # diamond
 
     
     prompts = []
@@ -76,17 +78,13 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
         # prompts.append(dataset[i])
         conv_t = get_conv_template_name("Meta-Llama3-8B-Instruct")
         conv = get_conv_template(conv_t)
-        # skip unsafe conversations.
         rand_idx = random.randint(0, len_dataset)
-        # should_skip = dataset[rand_idx]["toxic"] or dataset[rand_idx]["redacted"]
-        # if should_skip:
-        #     continue
-        # raw_prompt = dataset[rand_idx]["conversation"][0]["content"]
-        raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["question"] + " Answer: " 
-        # raw_prompt = dataset[rand_idx]["context"]
-        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["text"] + " Answer: " 
-        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["turns"][0] + " Answer: " 
-        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["problem"] + " Answer: "
+
+        raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["question"] + " Answer: "  # gsm8k
+        # raw_prompt = dataset[rand_idx]["context"] # wildchat
+        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["text"] + " Answer: " # mbpp
+        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["turns"][0] + " Answer: " # mt-bench
+        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["problem"] + " Answer: " # diamond
 
         conv.append_message(conv.roles[0], raw_prompt)
         conv.append_message(conv.roles[1], "")

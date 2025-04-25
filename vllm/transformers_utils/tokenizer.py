@@ -137,8 +137,8 @@ def get_tokenizer(
     """Gets a tokenizer for the given model name via HuggingFace or ModelScope.
     """
     
-    if 'L3' in tokenizer_name or 'qspec' in tokenizer_name.lower():
-        tokenizer_name='meta-llama/Meta-Llama-3-8B-Instruct'
+    # if 'L3' in tokenizer_name or 'qspec' in tokenizer_name.lower():
+    #     tokenizer_name='meta-llama/Meta-Llama-3-8B-Instruct'
     if VLLM_USE_MODELSCOPE:
         # download model from ModelScope hub,
         # lazy import so that modelscope is not required for normal use.

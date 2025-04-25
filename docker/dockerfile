@@ -1,0 +1,51 @@
+FROM nvidia/cuda:12.5.1-cudnn-devel-ubuntu22.04
+ARG DEBIAN_FRONTEND=noninteractive
+
+ENV MOFED_VER 5.3-1.0.0.1
+ENV OS_VER ubuntu22.04
+ENV PLATFORM x86_64
+ENV HOME /root
+WORKDIR ${HOME}
+
+# change data path and number of trainers here
+RUN apt-get update && apt-get install -y \
+    git ca-certificates curl jq wget \
+    net-tools build-essential libnuma-dev \
+    lsb-release 
+
+# update glibc
+RUN apt-get install software-properties-common -y
+RUN add-apt-repository ppa:ubuntu-toolchain-r/test -y \
+    && apt install --only-upgrade libstdc++6 -y
+
+# install conda
+ENV CONDA_DIR /opt/conda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+    /bin/bash ~/miniconda.sh -b -p /opt/conda
+ENV PATH=$CONDA_DIR/bin:$PATH
+ENV CONDA_PREFIX $CONDA_DIR
+
+RUN conda create -n qspec python=3.10 -y
+# activate the env
+RUN echo "source activate qspec" > ~/.bashrc
+ENV PATH /opt/conda/envs/qspec/bin:$PATH
+
+RUN curl -s https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
+RUN apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
+RUN apt update -y 
+RUN apt install cmake -y
+
+WORKDIR ${HOME}
+# einops
+RUN python3 -m pip install einops 
+RUN python3 -m pip install pandas matplotlib pytest
+# update setuptools
+RUN python3 -m pip install --upgrade setuptools
+# transformers
+RUN python3 -m pip install transformers
+RUN python3 -m pip install python-dotenv
+RUN python3 -m pip install sentencepiece protobuf==3.20.0
+
+WORKDIR /workspace/
+
+CMD /bin/bash

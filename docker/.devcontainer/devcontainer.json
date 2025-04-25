@@ -1,0 +1,20 @@
+{
+    "name": "QSpec",
+    "context": "..",
+    "dockerFile": "../dockerfile",
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "terminal.integrated.shell.linux": "/bin/bash"
+            },
+            "extensions": [
+                "ms-python.python",
+                "ms-vscode.cpptools"
+            ]
+        }
+    },
+    "mounts": [
+        "source=/home/whlu/QSpec,target=/workspace,type=bind"
+    ],
+    "remoteUser": "root"
+}
