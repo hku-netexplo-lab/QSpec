@@ -29,27 +29,26 @@ bash install.sh # this will also install the dependencies and QSpec Kernels, the
 ```
 
 ## Getting Started
-1. Download the pre-trained QSpec models from the huggingface model hub. We provide Llama3-8B-Instruct-QSpec as an example.
+**The QSpec serving script is in ./demo.py.** 
+1. Download the QSpec model from Huggingface hub copy the path to the model.
+
+2. Users can use demo.py to check the throughput of QSpec on their own machine.
 ```bash
-TBC
+# QSpec
+CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL  --speculative_model PATH-TO-QSPEC-MODEL(Same as the former)      --num-speculative-tokens 3   --max_num_seqs 4  --trust_remote_code --enforce_eager
+
+CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL  --max_num_seqs 4  --trust_remote_code --enforce_eager 
+# Auto-regressive W4A16 without QSpec (Baseline)
 ```
-2. Users can use LmEval to evaluate the model on downstream tasks. 
+
+3. Users can try other counterparts like EAGLE or N-gram etc. by changing the model name in the above commands.
 ```bash
-lm_eval --model vllm --model_args pretrained=PATH-TO-QSPEC-MODEL,\
-speculative_model=PATH-TO-QSPEC-MODEL,num_speculative_tokens=3,\
-trust_remote_code=True,enforce_eager=True --tasks tinyGSM8k
-```
-3. Users can use demo.py to check the throughput of QSpec on their own machine.
-```bash
- python demo.py --model models/L3_8B_Instruct_QSpec    --speculative_model models/L3_8B_Instruct_QSpec      --num-speculative-tokens 3     --trust_remote_code --enforce_eager --max_num_seqs 32
-```
-4. Users can try other counterparts like EAGLE or N-gram etc. by changing the model name in the above commands.
-```bash
- python demo.py --model models/Meta-Llama-3-8B-Instruct(target model) \
+CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL \
     --speculative_model PATH-TO-EAGLE \
     --num-speculative-tokens 3 \
-    --trust_remote_code --enforce_eager --max_num_seqs 32
-```
+    --max_num_seqs 4 \
+    --trust_remote_code --enforce_eager
+```    
 
 
 ## Notes

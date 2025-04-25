@@ -19,24 +19,19 @@ RESET = "\033[0m"
 
 '''
 1. Download the QSpec model from Huggingface hub copy the path to the model.
-2. Users can use LmEval to evaluate the model on downstream tasks. 
-```bash
-CUDA_DEVICE_ORDER=PCI_BUS_ID lm_eval --model vllm --model_args pretrained=PATH-TO-QSPEC-MODEL,\
-speculative_model=PATH-TO-QSPEC-MODEL,num_speculative_tokens=3,\
-trust_remote_code=True,enforce_eager=True --tasks tinyGSM8k --trust_remote_code
-```
-3. Users can use demo.py to check the throughput of QSpec on their own machine.
+2. Users can use demo.py to check the throughput of QSpec on their own machine.
 ```bash
 # QSpec
 CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL  --speculative_model PATH-TO-QSPEC-MODEL(Same as the former)      --num-speculative-tokens 3   --max_num_seqs 4  --trust_remote_code --enforce_eager
 CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL  --max_num_seqs 4  --trust_remote_code --enforce_eager 
 # Auto-regressive W4A16 without QSpec (Baseline)
 ```
-4. Users can try other counterparts like EAGLE or N-gram etc. by changing the model name in the above commands.
+3. Users can try other counterparts like EAGLE or N-gram etc. by changing the model name in the above commands.
 ```bash
 CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL \
     --speculative_model PATH-TO-EAGLE \
     --num-speculative-tokens 3 \
+    --max_num_seqs 4 \
     --trust_remote_code --enforce_eager
 ```             
 '''
@@ -69,7 +64,7 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
     prompts = []
     i = 0
     len_dataset = len(dataset)-1
-    num_prompts = 128
+    num_prompts = 32
     
     import random
     from vllm import get_conv_template_name, get_conv_template
