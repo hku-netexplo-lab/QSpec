@@ -47,22 +47,28 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
     sampling_params = SamplingParams(temperature=0.0, top_p=1.0, stop_token_ids=[128001, 128009], max_tokens=1024, stop=["Question:"])
     # start to load dataset
     # dataset = gsm8k
-    # dataset = datasets.load_dataset("openai/gsm8k", "main", split="train")
-    dataset = datasets.load_dataset("allenai/WildChat")["train"]
-    
+    dataset = datasets.load_dataset("openai/gsm8k", "main", split="train")
+    # dataset = datasets.load_dataset("allenai/WildChat")["train"]
+    # dataset = datasets.load_dataset("Muennighoff/mbpp", "full", split="test")
+    # dataset = datasets.load_dataset("philschmid/mt-bench", split="train")
+    # dataset = datasets.load_dataset("hendrydong/gpqa_diamond",split="test")
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
     torch.cuda.manual_seed_all(0)
     torch.backends.cudnn.deterministic = True
-    shot_num = 0
+    shot_num = 5
     prefix = ''
     for i in range(shot_num):
         prefix += 'Question: '+ dataset[i]["question"] + "  Answer: " + dataset[i]["answer"] + '\n'
+        # prefix += 'Question: '+ dataset[i]["text"] + "  Answer: " + dataset[i]["code"] + '\n'
+        # prefix += 'Question: '+ dataset[i]["problem"] + "  Answer: " + dataset[i]["solution"] + '\n'
+
     
     prompts = []
     i = 0
     len_dataset = len(dataset)-1
-    num_prompts = 2048
+    num_prompts = 128
+    
     import random
     from vllm import get_conv_template_name, get_conv_template
     random.seed(0)
@@ -75,10 +81,12 @@ def create_test_prompts() -> List[Tuple[str, SamplingParams]]:
         # should_skip = dataset[rand_idx]["toxic"] or dataset[rand_idx]["redacted"]
         # if should_skip:
         #     continue
-        raw_prompt = dataset[rand_idx]["conversation"][0]["content"]
-        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["question"] + " Answer: " 
+        # raw_prompt = dataset[rand_idx]["conversation"][0]["content"]
+        raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["question"] + " Answer: " 
         # raw_prompt = dataset[rand_idx]["context"]
-    
+        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["text"] + " Answer: " 
+        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["turns"][0] + " Answer: " 
+        # raw_prompt = prefix + 'Question: ' + dataset[rand_idx]["problem"] + " Answer: "
 
         conv.append_message(conv.roles[0], raw_prompt)
         conv.append_message(conv.roles[1], "")

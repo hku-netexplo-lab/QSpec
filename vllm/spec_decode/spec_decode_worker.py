@@ -337,13 +337,13 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         self.scorer_worker.load_model()
         
 
-        # if self.draft_model_config.hf_config.model_type == "llama_quarot":
-        #     self.proposer_worker.load_model(self.scorer_worker.model_runner.model)
-        #     self.proposer_worker.model_runner.vllm_config.compilation_config.static_forward_context = self.scorer_worker.model_runner.vllm_config.compilation_config.static_forward_context
-        # else:
-        #     self.proposer_worker.load_model()
+        if self.draft_model_config.hf_config.model_type == "llama_quarot":
+            self.proposer_worker.load_model(self.scorer_worker.model_runner.model)
+            self.proposer_worker.model_runner.vllm_config.compilation_config.static_forward_context = self.scorer_worker.model_runner.vllm_config.compilation_config.static_forward_context
+        else:
+            self.proposer_worker.load_model()
 
-        self.proposer_worker.load_model()
+        # self.proposer_worker.load_model()
 
 
 
@@ -432,18 +432,18 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                                             num_cpu_blocks=num_cpu_blocks)
         
         
-        # if self.draft_model_config.hf_config.model_type == "llama_quarot":
-        #     self.proposer_worker.ref_initilize_cache(num_gpu_blocks=num_gpu_blocks,
-        #                                          num_cpu_blocks=num_cpu_blocks,
-        #                                          cache_engine = self.scorer_worker.cache_engine,
-        #                                          gpu_cache = self.scorer_worker.gpu_cache,
-        # )
-        # else:
-        #     self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks, num_cpu_blocks=num_cpu_blocks)
+        if self.draft_model_config.hf_config.model_type == "llama_quarot":
+            self.proposer_worker.ref_initilize_cache(num_gpu_blocks=num_gpu_blocks,
+                                                 num_cpu_blocks=num_cpu_blocks,
+                                                 cache_engine = self.scorer_worker.cache_engine,
+                                                 gpu_cache = self.scorer_worker.gpu_cache,
+        )
+        else:
+            self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks, num_cpu_blocks=num_cpu_blocks)
         #      
         # origin ————————————————————————————————————
-        self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
-                                              num_cpu_blocks=num_cpu_blocks)
+        # self.proposer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
+        #                                       num_cpu_blocks=num_cpu_blocks)
         # end of origin ————————————————————————————————————
         
         
