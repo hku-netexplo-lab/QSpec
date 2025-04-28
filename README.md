@@ -31,7 +31,10 @@ bash install.sh # this will also install the dependencies and QSpec Kernels, the
 ## Getting Started
 **The QSpec serving script is in ./demo.py.** 
 1. Download the QSpec model from Huggingface hub copy the path to the model.
-
+```bash
+git lfs install
+git clone https://huggingface.co/AnonymousResearcher2025/Llama3_8B_Instruct_QSpec
+```
 2. Users can use demo.py to check the throughput of QSpec on their own machine.
 ```bash
 # QSpec
