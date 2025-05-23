@@ -1,3 +1,4 @@
+![alt text](figs/image-3.png)
 # QSpec Official Implementation v0.0 
 This is the official implementation of the QSpec: Speculative Decoding with Complementary Quantization Schemes. Leveraging nearly cost-free execution switching, QSpec drafts tokens with low-precision, fast activation-weight quantization, and verifies them with high-precision weight-only quantization, effectively combines the strengths of both quantization schemes.
 
@@ -40,8 +41,8 @@ git clone https://huggingface.co/AnonymousResearcher2025/Llama3_8B_Instruct_QSpe
 # QSpec
 CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL  --speculative_model PATH-TO-QSPEC-MODEL(Same as the former)      --num-speculative-tokens 3   --max_num_seqs 4  --trust_remote_code --enforce_eager
 
-CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL  --max_num_seqs 4  --trust_remote_code --enforce_eager 
 # Auto-regressive W4A16 without QSpec (Baseline)
+CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL  --max_num_seqs 4  --trust_remote_code --enforce_eager 
 ```
 
 3. Users can try other counterparts like EAGLE or N-gram etc. by changing the model name in the above commands.
@@ -58,3 +59,16 @@ CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL \
 - QSpec's kernels were written on CUDA 12.5. Inspired by the FlashAttention, FlashInfer, TorchAO, QuaRot and other projects, we have implemented the QSpec kernels in third-party libraries.
 - QSpec is a research project and is not yet ready for production use as we have not yet optimized the performance of the kernels to the fullest extent and have not yet integrated the kernels into VLLM accordingly. We use plugins to integrate QSpec into VLLM and slightly modify the VLLM codebase to support QSpec. We will release the full version of QSpec on VLLM in the near future.
 - **The first run of the QSpec model may be slow due to the auto-tuning process for linear layers on different/specific target GPUs. But the optimized kernels will be cached for future runs. It takes about 5 to 10 minutes in our machine**
+
+## Demo Figures
+
+- Initializing the QSpec model and vLLM framework.
+![Initializing](figs/image.png)
+
+- The test outputs of QSpec.
+
+![alt text](figs/image-1.png)
+
+- The test outputs of the baseline model (W4A16) without QSpec.
+
+![alt text](figs/image-2.png)

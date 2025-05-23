@@ -1065,15 +1065,17 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         """Log the speculative stage times. If stat logging is disabled, do
         nothing.
         """
+        return 
         if self._disable_log_stats:
             return
-
-        logger.info(
-            "SpecDecodeWorker stage times: "
-            "average_time_per_proposal_tok_ms=%.02f "
-            "scoring_time_ms=%.02f verification_time_ms=%.02f",
-            average_time_per_proposal_tok_ms, scoring_time_ms,
-            verification_time_ms)
+        
+        # not precise, but good enough
+        # logger.info(
+        #     "SpecDecodeWorker stage times: "
+        #     "average_time_per_proposal_tok_ms=%.02f "
+        #     "scoring_time_ms=%.02f verification_time_ms=%.02f",
+        #     average_time_per_proposal_tok_ms, scoring_time_ms,
+        #     verification_time_ms)
 
     def _create_dummy_logprob_lists(
         self,

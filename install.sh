@@ -15,5 +15,5 @@ python setup.py install
 cd ../..
 pip install -e third-party/QuaRot
 echo "QSpec installed"
-CUDA_DEVICE_ORDER=PCI_BUS_ID
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
 
