@@ -25,6 +25,8 @@ class RMSNorm(torch.nn.Module):
             scales = kwargs.get("scale_buffer",None)
             input_sum = kwargs.get("input_sum_buffer",None)
             return self.fuse_forward(x, out_q, scales, input_sum)
+        if kwargs.get("w4a8",False):
+            return self.a8_forward(x, **kwargs)
         else:
             return self.unfuse_forward(x)
         
@@ -76,4 +78,29 @@ class RMSNorm(torch.nn.Module):
             x,
             self.eps,
         )
+        # breakpoint()
         return out
+    
+    def a8_forward(self, x: torch.Tensor, out = None, **kwargs) -> torch.Tensor:
+       
+        if x.dim() == 2:
+            batched_length,hidden_size = x.size()
+        else:
+            bsz, length, hidden_size = x.size()
+            batched_length = bsz * length
+
+        out_q = torch.zeros(batched_length, hidden_size , dtype=torch.int8, device="cuda")
+        scaling_factor_and_input_sum = torch.zeros(2,batched_length, dtype=torch.float16, device="cuda")
+        input_sum = scaling_factor_and_input_sum[0]
+        scaling_factor = scaling_factor_and_input_sum[1]
+                
+        layernorm_ops.rms_norm_general_fuse_sum_i8(
+            out_q,
+            x,
+            input_sum,
+            scaling_factor,
+            self.eps,
+            True,
+        )
+        # breakpoint()
+        return quarot.PackedQuantizedTensor(out_q, scaling_factor)

@@ -17,6 +17,14 @@ class Quantizer(torch.nn.Module):
                 quantized_x, scales_x = quarot.fuse_sym_quant_with_buffer(x,scale,out,self.input_clip_ratio)
             packed_tensor = quarot.PackedQuantizedTensor(quantized_x, scales_x)
             return packed_tensor
+        elif kwargs.get("w4a8",False):
+            if scale is None or out is None:
+                quantized_x, scales_x = quarot.fuse_sym_quant_i8(x, self.input_clip_ratio)
+            else:
+                quantized_x, scales_x = quarot.fuse_sym_quant_i8_with_buffer(x,scale,out,self.input_clip_ratio)
+            packed_tensor = quarot.PackedQuantizedTensor(quantized_x, scales_x)
+            return packed_tensor
         else:
+            # breakpoint()
             return x
         

@@ -68,6 +68,7 @@ _TEXT_GENERATION_MODELS = {
     # For decapoda-research/llama-*
     "LLaMAForCausalLM": ("llama", "LlamaForCausalLM"),
     "QuarotLlamaForCausalLM": ("quarot_llama", "QuarotLlamaForCausalLM"),
+    "Qwen2QuaRotForCausalLM": ("qwen2_quarot", "Qwen2QuaRotForCausalLM"),
     "MambaForCausalLM": ("mamba", "MambaForCausalLM"),
     "FalconMambaForCausalLM": ("mamba", "MambaForCausalLM"),
     "MiniCPMForCausalLM": ("minicpm", "MiniCPMForCausalLM"),

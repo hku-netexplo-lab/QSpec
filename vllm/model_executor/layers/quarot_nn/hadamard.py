@@ -21,7 +21,7 @@ class OnlineHadamard(torch.nn.Module):
         self.qspec = False       
     
     def forward(self, x, out = None, **kwargs):
-        if kwargs.get("w4a4", False):
+        if kwargs.get("w4a4", False) or kwargs.get("w4a8", False):
             self.qspec = True
             
         x_dtype = x.dtype

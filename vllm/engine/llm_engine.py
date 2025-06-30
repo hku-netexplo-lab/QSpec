@@ -271,7 +271,6 @@ class LLMEngine:
             self.model_config)
 
         self.model_executor = executor_class(vllm_config=vllm_config, )
-
         if self.model_config.runner_type != "pooling":
             self._initialize_kv_caches()
 
@@ -411,6 +410,7 @@ class LLMEngine:
         The workers will determine the number of blocks in both the GPU cache
         and the swap CPU cache.
         """
+        # breakpoint()
         start = time.time()
         num_gpu_blocks, num_cpu_blocks = (
             self.model_executor.determine_num_available_blocks())
@@ -1317,7 +1317,7 @@ class LLMEngine:
              allow_async_output_proc
              ) = self.scheduler[virtual_engine].schedule()
             # breakpoint()
-            batchsize = len(seq_group_metadata_list[0].seq_data)
+            # batchsize = len(seq_group_metadata_list[0].seq_data)
             # print(f"batchsize: {batchsize}")
             ctx.seq_group_metadata_list = seq_group_metadata_list
             ctx.scheduler_outputs = scheduler_outputs

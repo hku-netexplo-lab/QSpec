@@ -189,9 +189,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
 
                     allow_zero_draft_token_step = False
                 
-                # if draft_model_config.hf_config.model_type == "llama_quarot":
-                #     proposer_worker = QSpecWorker(**draft_worker_kwargs)
-                # else:
+                
                 proposer_worker = MultiStepWorker(**draft_worker_kwargs)
 
             proposer_worker = SmallerTpProposerWorker.maybe_wrap_worker(
@@ -336,8 +334,11 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         # NOTE(cade): load_model is not part of the WorkerBase interface.
         self.scorer_worker.load_model()
         
+        # breakpoint()
 
-        if self.draft_model_config.hf_config.model_type == "llama_quarot":
+        if self.draft_model_config.hf_config.model_type == "llama_quarot" or \
+              self.draft_model_config.hf_config.model_type == "qwen2_quarot":
+            # For llama_quarot and qwen2_quarot, we need to load
             self.proposer_worker.load_model(self.scorer_worker.model_runner.model)
             self.proposer_worker.model_runner.vllm_config.compilation_config.static_forward_context = self.scorer_worker.model_runner.vllm_config.compilation_config.static_forward_context
         else:
@@ -412,13 +413,13 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         proposer_cache_block_size_bytes = (
             self.proposer_worker.get_cache_block_size_bytes())
 
-        # need to be improve for llama_quarot
         
         new_num_gpu_blocks = split_num_cache_blocks_evenly(
             scorer_cache_block_size_bytes, proposer_cache_block_size_bytes,
             num_gpu_blocks)
         
-        if self.draft_model_config.hf_config.model_type == "llama_quarot":
+        if self.draft_model_config.hf_config.model_type == "llama_quarot" or \
+              self.draft_model_config.hf_config.model_type == "qwen2_quarot":
             new_num_gpu_blocks = num_gpu_blocks
         
         
@@ -431,8 +432,9 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         self.scorer_worker.initialize_cache(num_gpu_blocks=num_gpu_blocks,
                                             num_cpu_blocks=num_cpu_blocks)
         
-        
-        if self.draft_model_config.hf_config.model_type == "llama_quarot":
+
+        if self.draft_model_config.hf_config.model_type == "llama_quarot" or \
+              self.draft_model_config.hf_config.model_type == "qwen2_quarot":
             self.proposer_worker.ref_initilize_cache(num_gpu_blocks=num_gpu_blocks,
                                                  num_cpu_blocks=num_cpu_blocks,
                                                  cache_engine = self.scorer_worker.cache_engine,
@@ -792,7 +794,8 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         # breakpoint()
         with Timer() as proposal_timer:
             # Generate proposals using draft worker.
-            if self.draft_model_config.hf_config.model_type == "llama_quarot":
+            if self.draft_model_config.hf_config.model_type == "llama_quarot" or \
+               self.draft_model_config.hf_config.model_type == "qwen2_quarot":
                 execute_model_req.w4a4 = True
                 # breakpoint()
             proposals = self.proposer_worker.get_spec_proposals(

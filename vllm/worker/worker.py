@@ -194,10 +194,28 @@ class Worker(LocalOrDistributedWorkerBase):
 
         # Execute a forward pass with dummy inputs to profile the memory usage
         # of the model.
+        # breakpoint()
         with memory_profiling(
                 self.baseline_snapshot,
                 weights_memory=self.model_runner.model_memory_usage) as result:
             self.model_runner.profile_run()
+        
+        #mock result; 
+        # class MockResult:
+        #     def __init__(self):
+        #         # 权重内存：10GB
+        #         self.weights_memory = 10 * 1024 * 1024 * 1024  # 10GB
+        #         # PyTorch峰值内存增长：4GB  
+        #         self.torch_peak_increase = 4 * 1024 * 1024 * 1024  # 4GB
+        #         # 非PyTorch内存增长：0.5GB
+        #         self.non_torch_increase = 0.5 * 1024 * 1024 * 1024  # 0.5GB
+        #         # 非KV缓存内存 = 权重 + 非PyTorch内存
+        #         self.non_kv_cache_memory = self.weights_memory + self.non_torch_increase
+        #         # 分析时间
+        #         self.profile_time = 0.1
+    
+        # result = MockResult()
+        
 
         self._assert_memory_footprint_increased_during_profiling()
 

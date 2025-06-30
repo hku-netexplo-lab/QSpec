@@ -63,7 +63,15 @@ def main(args):
     # remove all the '.module' from the keys
     quantizers = {key.replace('.module', ''): value for key, value in quantizers_dict.items()}
     
-  
+    #old_dict q k v fuse into a qkv; gate up fused into a gateup
+    # model.layers.41.self_attn.q_proj.weight k_proj.weight v_proj.weight to qkv_proj.weight
+    # q_proj.bias k_proj.bias v_proj.bias to qkv_proj.bias
+    # 
+    # in quantizers:model.layers.47.self_attn.q_proj['scale'] qkv->qkv_proj 
+    # in quantizers:model.layers.47.self_attn.gate_proj['scale'] gate up -> gate_up_proj
+    
+    
+    
     
     # remove model.norm.weight
     
@@ -80,6 +88,7 @@ def main(args):
         "mlp.down_proj": "mlp.down_proj.2",
         "self_attn.o_proj": "self_attn.o_proj.1"
     }
+    
     bad_key_names = {
         "post_attention_layernorm.weight",
         "input_layernorm.weight",

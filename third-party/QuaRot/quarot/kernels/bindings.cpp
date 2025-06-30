@@ -43,6 +43,24 @@ torch::Tensor sym_quant(const torch::Tensor &x, const torch::Tensor &scale)
     return q;
 }
 
+torch::Tensor sym_quant_i8(const torch::Tensor &x, const torch::Tensor &scale)
+{
+    torch::checkAllContiguous("sym_quant_i8", {{x,     "x",     0},
+                                               {scale, "scale", 1}});
+    torch::checkDeviceType("sym_quant_i8", {x, scale}, at::DeviceType::CUDA);
+    torch::checkSameGPU("sym_quant_i8", {x, "x", 0}, {scale, "scale", 1});
+    torch::checkSize("sym_quant_i8", torch::TensorArg{scale, "scale", 1}, 0, x.size(0));
+    
+    uint32_t rows = x.size(0);
+    uint32_t cols = x.size(1);
+    
+    auto q = torch::empty({rows, cols}, torch::dtype(torch::kInt8).device(x.device()));
+    
+    sym_quant_i8_host((half*)x.data_ptr(), (half*)scale.data_ptr(), rows, cols, q.data_ptr<int8_t>());
+    
+    return q;
+}
+
 
 
 torch::Tensor sym_dequant(const torch::Tensor &q,
@@ -87,6 +105,26 @@ torch::Tensor sym_dequant(const torch::Tensor &q,
     return x;
 }
 
+torch::Tensor sym_dequant_i8(const torch::Tensor &q, const torch::Tensor &scale)
+{
+    torch::checkAllContiguous("sym_dequant_i8", {{q,     "q",     0},
+                                                 {scale, "scale", 1}});
+    torch::checkDeviceType("sym_dequant_i8", {q, scale}, at::DeviceType::CUDA);
+    torch::checkSameGPU("sym_dequant_i8", {q, "q", 0}, {scale, "scale", 1});
+    torch::checkSize("sym_dequant_i8", torch::TensorArg{scale, "scale", 1}, 0, q.size(0));
+    
+    uint32_t rows = q.size(0);
+    uint32_t cols = q.size(1);
+    
+    auto x = torch::empty({rows, cols}, torch::dtype(torch::kFloat16).device(q.device()));
+    
+    sym_dequant_i8_host(q.data_ptr<int8_t>(), (half*)scale.data_ptr(), rows, cols, (half*)x.data_ptr());
+    
+    return x;
+}
+
+
+
 void fuse_sym_quant(
   const torch::Tensor x,
   torch::Tensor scale,
@@ -105,6 +143,27 @@ void fuse_sym_quant(
                           {scale, "scale", 1},
                           {q, "q", 2}});
   rowAbsMaxQuantize(x, scale, q, input_clip_ratio, 256);
+
+}
+
+void fuse_sym_quant_i8(
+  const torch::Tensor x,
+  torch::Tensor scale,
+  torch::Tensor q,
+  const float input_clip_ratio
+){
+
+  torch::checkAllContiguous("fuse_sym_quant_i8",
+                            {{x, "x", 0},
+                             {scale, "scale", 1},
+                             {q, "q", 2}});
+  torch::checkDeviceType("fuse_sym_quant_i8", {x, scale, q}, at::DeviceType::CUDA);
+
+  torch::checkAllSameGPU("fuse_sym_quant_i8",
+                         {{x, "x", 0},
+                          {scale, "scale", 1},
+                          {q, "q", 2}});
+  rowAbsMaxQuantize_i8(x, scale, q, input_clip_ratio, 256);
 
 }
 
@@ -462,26 +521,30 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m
           "output = int4Packing(int4Rounding(source / scale)\n",
           py::arg("x"), py::arg("scale"));
 
-    m.def("sym_dequant", &sym_dequant,
-          "input (x: torch.Tensor(M x N), scale_row: torch.Tensor(M x 1, "
-          "FP16), scale_col: torch.Tensor(1 x N, FP16)"
-          "bits: int\n"
-          "output: torch.Tensor(M x N, FP16)\n"
-          "output = x * scale_row * scale_col"
-          "when bits equal 8: "
-          "input x type is int8\n"
-          "when bits equal 16: "
-          "input x type is FP16\n"
-          "when bits equal 32: "
-          "input x type is int32\n",
-          py::arg("q"), py::arg("scale_row"), py::arg("scale_col"),
-          py::arg("bits"));
+    m.def("sym_quant_i8", &sym_quant_i8,
+          "input: (x: torch.Tensor(M x N, FP16, CUDA), scale: torch.Tensor(M x 1, FP16, CUDA))\n"
+          "output: torch.Tensor(M x N, INT8, CUDA)\n"
+          "INT8 symmetric quantization: output = round(x / scale) clamped to [-128, 127]",
+          py::arg("x"), py::arg("scale"));
+          
+    m.def("sym_dequant_i8", &sym_dequant_i8,
+          "input: (q: torch.Tensor(M x N, INT8, CUDA), scale: torch.Tensor(M x 1, FP16, CUDA))\n"
+          "output: torch.Tensor(M x N, FP16, CUDA)\n"
+          "INT8 symmetric dequantization: output = q * scale",
+          py::arg("q"), py::arg("scale"));
 
     m.def("fuse_sym_quant", &fuse_sym_quant,
           "input: (x: torch.Tensor(M x N, FP16, CUDA), scale: torch.Tensor(M x "
           "1, FP16, CUDA), input_clip_ratio: float)"
           "output: torch.Tensor(M x ceil(N / 2), UINT8, CUDA)\n"
           "output = int4Packing(int4Rounding(source / scale)\n",
+          py::arg("x"), py::arg("scale"), py::arg("q"),
+          py::arg("input_clip_ratio"));
+    m.def("fuse_sym_quant_i8", &fuse_sym_quant_i8,
+          "input: (x: torch.Tensor(M x N, FP16, CUDA), scale: torch.Tensor(M x "
+          "1, FP16, CUDA), input_clip_ratio: float)"
+          "output: torch.Tensor(M x N, INT8, CUDA)\n"
+          "INT8 symmetric quantization: output = round(x / scale) clamped to [-128, 127]",
           py::arg("x"), py::arg("scale"), py::arg("q"),
           py::arg("input_clip_ratio"));
     m.def("fuse_asym_quantize_and_pack_i4", &fuse_asym_quantize_and_pack_i4,

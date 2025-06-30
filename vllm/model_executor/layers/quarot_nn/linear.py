@@ -5,7 +5,7 @@ import bitblas
 from bitblas import auto_detect_nvidia_target
 from bitblas.cache import global_operator_cache, get_database_path
 # from . import functional
-from torchao.ops import rowwise_scaled_linear_cutlass_s4s4_unified, rowwise_scaled_linear_cutlass_s4s4
+from torchao.ops import rowwise_scaled_linear_cutlass_s4s4_unified, rowwise_scaled_linear_cutlass_s8s4
 
 
 class ShapeHandler:
@@ -44,9 +44,11 @@ class Linear4bit(torch.nn.Module):
             self.bias = None
             
         self.de_weight = None
-        # key = in_features-out_features
+        key = in_features-out_features
         key = f"{in_features}-{out_features}"
-        self.a16_matmul = kwargs.get(key,None)
+        self.a16_matmul = kwargs.get(key, None)
+        # if self.a16_matmul is None:
+        #     breakpoint()
         self.mask  =(1 << 3) | (1 << 7)
         # breakpoint()
 
@@ -55,6 +57,8 @@ class Linear4bit(torch.nn.Module):
     def forward(self,x,C=None,**kwargs):
         if kwargs.get("w4a4",False):
             return self.forward_w4a4(x,C)
+        elif kwargs.get("w4a8",False):
+            return self.forward_w4a8(x,C)
         else:
             return self.forward_w4a16(x)    
         
@@ -79,6 +83,21 @@ class Linear4bit(torch.nn.Module):
         # out = quarot.fuse_matmul(x, scales_x, self.weight, self.weight_scales, self.bias, C)
         return C
     
+    def forward_w4a8(self, x,C=None):
+        #if torch.cuda.current_device() != x.device:
+        #    torch.cuda.set_device(x.device)
+        
+        # TODO Improve the following code, move the shape handing to the init.
+        assert type(x) == quarot.PackedQuantizedTensor # Quantized input is given
+        x, scales_x = x.quantized_x, x.scales_x
+        # print(x.shape)
+        if self.weight_scales.dim() == 2:
+            self.weight_scales = self.weight_scales.view(-1)
+        if self.weight.dtype != torch.int8:
+            self.weight = self.weight.to(torch.int8)
+        output = rowwise_scaled_linear_cutlass_s8s4(x, scales_x, self.weight, self.weight_scales, self.bias)
+        return output
+    
 
     def forward_w4a16(self, x,C=None):
         if self.weight_scales.dim() == 2:
@@ -89,7 +108,19 @@ class Linear4bit(torch.nn.Module):
         if C is None:
             C = torch.empty(x.shape[0], self.weight.shape[0], dtype=torch.float16, device="cuda")
         
-        self.a16_matmul(x, self.weight ^ self.mask , output=C, scale = self.weight_scales)
+        # unpacked_weight = quarot.functional.unpack_i4(self.weight.to(torch.uint8))  # [7168, 5120]
+        # unpacked_weight = unpacked_weight.to(torch.float16)
+        # if self.weight_scales.dim() == 1:
+        # # weight_scales: [7168] -> [7168, 1] for broadcasting
+        #     scales = self.weight_scales.view(-1, 1)  # [7168, 1]
+        # else:
+        #     scales = self.weight_scales
+            
+        # fp16_weight = unpacked_weight * scales  # [7168, 5120]
+
+        
+        self.a16_matmul(x, self.weight ^ self.mask , output=C, scale = self.weight_scales, bias = self.bias)
+        
         return C
         
         
@@ -122,7 +153,7 @@ class Linear4bit(torch.nn.Module):
 
 
 
-def get_matmul_op_w4a16(in_features, out_features, with_scaling = True, enable_tuning = True, fast_decoding = False):
+def get_matmul_op_w4a16(in_features, out_features, with_scaling = True, enable_tuning = True, fast_decoding = False, bias=False):
     '''
     Get the matmul operator for the 4-bit linear layer.
     '''
@@ -136,7 +167,7 @@ def get_matmul_op_w4a16(in_features, out_features, with_scaling = True, enable_t
     
     
     matmul_config_a16 = bitblas.MatmulConfig(
-        M = [16, 32, 64, 128, 256, 512, 1024, 2048], #, 256*3, 1024, 2048],
+        M = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096], #, 256*3, 1024, 2048],
         N = out_features,
         K = in_features,
         A_dtype= "float16",
@@ -144,7 +175,7 @@ def get_matmul_op_w4a16(in_features, out_features, with_scaling = True, enable_t
         accum_dtype="float16",
         out_dtype="float16",
         layout="nt",
-        with_bias=False,
+        with_bias=bias,
         propagate_b=False,
         fast_decoding=fast_decoding,
         group_size=-1,

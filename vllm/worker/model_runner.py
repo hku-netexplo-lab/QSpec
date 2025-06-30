@@ -1146,8 +1146,44 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
                             self.model.fuse_qkv()
                             logger.info("fuse gate up")
                             self.model.fuse_gate_up()
+                
+                elif "qwen2_quarot" in self.model_config.model.lower():
+                    import transformers
+                    from vllm.model_executor.layers.quarot_nn.linear import get_matmul_op_w4a16
+                    with transformers.modeling_utils.no_init_weights(): 
+                        with set_current_vllm_config(self.vllm_config):
+                            from vllm.model_executor.models import qwen2_quarot
+                            torch.set_default_dtype(torch.float16)
+                            kwargs= {}
                             
-                        
+                            # QKV Projection, 5120 -> 5120 + 2560
+                            logger.info("Init qkv_proj_w4a16")
+                            kwargs["5120-7168"] = get_matmul_op_w4a16(in_features=5120, out_features=7168,bias=True)
+                            # Output Projection, 5120 -> 5120
+                            logger.info("Init o_proj_w4a16")
+                            kwargs["5120-5120"] = get_matmul_op_w4a16(in_features=5120, out_features=5120)
+                            # Gate Up Projection, 5120 -> 13824 * 2 (27648)
+                            logger.info("Init gate_up_proj_w4a16")
+                            kwargs["5120-27648"] = get_matmul_op_w4a16(in_features=5120, out_features=13824 * 2)
+                            # Gate Down Projection, 13824 -> 5120
+                            logger.info("Init gate_down_proj_w4a16")
+                            kwargs["13824-5120"] = get_matmul_op_w4a16(in_features=13824, out_features=5120)
+                            
+                            
+                            # kwargs["w4a4"] = True
+                            # breakpoint()
+                            self.model = qwen2_quarot.Qwen2QuaRotForCausalLM(qwen_config=self.model_config.hf_config, vllm_config=self.vllm_config,**kwargs)
+                            from safetensors.torch import load_file
+                            weight_path = self.model_config.model+"/model.safetensors"
+                            state_dict = load_file(weight_path)
+                            # merge the two state_dicts into one
+                            #.replace("o_proj.1.", "o_proj.")
+                            state_dict = {k.replace("down_proj.0.", "online_hadamard.").replace("down_proj.2.", "down_proj.") : v for k, v in state_dict.items()}
+                            # breakpoint()
+                            self.model.load_state_dict(state_dict)
+                            torch.set_default_dtype(torch.float16)
+                            self.model.cuda()
+
                 else:
                     self.model = get_model(vllm_config=self.vllm_config)
 
@@ -1772,10 +1808,10 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
             with set_forward_context(model_input.attn_metadata,
                                      self.vllm_config, virtual_engine):
                 
-                if self.model_config.hf_config.model_type != 'llama_quarot':
+                if self.model_config.hf_config.model_type != 'llama_quarot' and self.model_config.hf_config.model_type != 'qwen2_quarot':
                     kwargs.pop("w4a4", None)
                 # else:
-                #     # enable w4a4 path
+                #    # enable w4a4 path
                 #     kwargs["w4a4"] = True
                 #     # calculate the buffer sizes
                 #     seq_len = model_input.input_tokens.shape[0]
@@ -1835,7 +1871,7 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
                                                  device=self.device),
                     **seqlen_agnostic_kwargs,
                     **kwargs,)
-
+        # breakpoint()
         if (self.observability_config is not None
                 and self.observability_config.collect_model_forward_time):
             model_forward_end.record()

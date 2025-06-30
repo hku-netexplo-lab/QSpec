@@ -11,7 +11,8 @@ import quarot._CUDA
 __all__ = [ 
            "matmul", #int-4 matmul
            "sym_quant", "sym_dequant", "PackedQuantizedTensor", # Quantization
-           "fuse_sym_quant_with_buffer",
+           "sym_quant_i8", "sym_dequant_i8", # INT8 Quantization
+           "fuse_sym_quant_with_buffer", "fuse_sym_quant", "fuse_sym_quant_i8", # Fused Quantization
 ]
 
 class ShapeHandler:
@@ -104,12 +105,34 @@ def sym_quant(x, scale):
     x, x_shape_excl_last = flatten_last_dim_and_return_shape(x)
     return quarot._CUDA.sym_quant(x, scale.view(-1)).view(*x_shape_excl_last, -1)
 
+def sym_quant_i8(x, scale):
+    assert x.dtype == scale.dtype == torch.float16
+    x, x_shape_excl_last = flatten_last_dim_and_return_shape(x)
+    return quarot._CUDA.sym_quant_i8(x, scale.view(-1)).view(*x_shape_excl_last, -1)
+
+def sym_dequant_i8(q, scale):
+    assert q.dtype == torch.int8
+    assert scale.dtype == torch.float16
+    q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
+    return quarot._CUDA.sym_dequant_i8(q, scale.view(-1)).view(*q_shape_excl_last, -1)
+
 def fuse_sym_quant(x, clip_ratio = 1.0):
     batched_seq_len, hidden_size = x.shape
     scale = torch.empty(batched_seq_len, dtype=torch.float16, device=x.device)
     out = torch.empty(batched_seq_len, hidden_size//2, dtype=torch.int8, device=x.device)
     quarot._CUDA.fuse_sym_quant(x, scale, out, clip_ratio)
     #return out.view(*x_shape_excl_last, -1), scale
+    return out, scale
+
+def fuse_sym_quant_i8(x, clip_ratio = 1.0):
+    batched_seq_len, hidden_size = x.shape
+    scale = torch.empty(batched_seq_len, dtype=torch.float16, device=x.device)
+    out = torch.empty(batched_seq_len, hidden_size, dtype=torch.int8, device=x.device)
+    quarot._CUDA.fuse_sym_quant_i8(x, scale, out, clip_ratio)
+    return out, scale
+
+def fuse_sym_quant_i8_with_buffer(x, scale, out, clip_ratio = 1.0):
+    quarot._CUDA.fuse_sym_quant_i8(x, scale, out, clip_ratio)
     return out, scale
 
 def fuse_sym_quant_with_buffer(x, scale, out, clip_ratio = 1.0):

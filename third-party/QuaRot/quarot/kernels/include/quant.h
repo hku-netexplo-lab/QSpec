@@ -30,10 +30,34 @@ void rowAbsMaxQuantize(
         int block_size
 );
 
+void rowAbsMaxQuantize_i8(
+        at::Tensor x,
+        at::Tensor scale,
+        at::Tensor q,
+        float clip_ratio,
+        int block_size
+);
+
 void asym_quantize_and_pack_i4(
     at::Tensor x_k, at::Tensor x_v, 
     at::Tensor q_k, at::Tensor q_v, 
     at::Tensor scale_k, at::Tensor zero_k, 
     at::Tensor scale_v, at::Tensor zero_v,
     int bsz, int q_len, int num_key_value_heads, int head_dim
+);
+
+void sym_quant_i8_host(
+        const half *x,
+        const half *scale,
+        uint32_t rows,
+        uint32_t cols,
+        int8_t *q
+);
+
+void sym_dequant_i8_host(
+        const int8_t *q,
+        const half *scale,
+        uint32_t rows,
+        uint32_t cols,
+        half *x
 );

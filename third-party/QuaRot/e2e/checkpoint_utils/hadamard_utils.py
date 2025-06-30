@@ -89,14 +89,17 @@ def random_hadamard_matrix(size, device):
     Q = torch.diag(Q)
     return matmul_hadU(Q).to(device)
 
-def matmul_hadU_cuda(X, hadK, K):
+def matmul_hadU_cuda(X, hadK, K, scale = None):
     n = X.shape[-1]
+    if scale is None:
+        scale = 1.0 / torch.tensor(n).sqrt()
     if K == 1:
-        return fast_hadamard_transform.hadamard_transform(X.contiguous(), 1.0/torch.tensor(n).sqrt()) 
+        return fast_hadamard_transform.hadamard_transform(X.contiguous(), scale)
     # if transpose:
     #     hadK = hadK.T.contiguous()
     input = X.view(-1, K, n // K)
-    input = fast_hadamard_transform.hadamard_transform(input.contiguous(), 1.0/torch.tensor(n).sqrt())
+    # breakpoint()
+    input = fast_hadamard_transform.hadamard_transform(input.contiguous(), scale)
     input = hadK.to(input.device).to(input.dtype) @ input
     return input.reshape(X.shape)
 

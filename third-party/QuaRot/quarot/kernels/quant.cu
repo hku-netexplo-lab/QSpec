@@ -45,6 +45,8 @@ void sym_quantize_f16_i4_kernel(
 }
 
 
+
+
 void sym_quant_host(
         const half *x,
         const half *scale,
@@ -183,6 +185,105 @@ void rowAbsMaxQuantize(
         d_mat_ptr, d_scale_ptr, d_out_ptr, m, n, clip_ratio, block_size);
 }
 
+__global__ 
+void rowAbsMaxQuantizeKernel_i8(const at::Half* d_mat, at::Half* d_scale, int8_t* d_out, int m, int n, float clip_ratio, int block_size) {
+    int row = blockIdx.x;
+    int tid = threadIdx.x;
+    int col_start = tid;
+
+    extern __shared__ at::Half sharedMax_i8[];
+    sharedMax_i8[tid] = __float2half(0.0f);
+
+    // 计算当前行的最大绝对值
+    for (int col = col_start; col < n; col += block_size) {
+        sharedMax_i8[tid] = __hmax(sharedMax_i8[tid], __habs(d_mat[row * n + col]));
+    }
+    __syncthreads();
+
+    // 归约求最大值
+    for (int stride = block_size / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            sharedMax_i8[tid] = __hmax(sharedMax_i8[tid], sharedMax_i8[tid + stride]);
+        }
+        __syncthreads();
+    }
+
+    at::Half max_abs = sharedMax_i8[0];
+    if (tid == 0) {
+        // INT8 量化范围是 [-128, 127]，所以除以127而不是7
+        d_scale[row] = __hdiv(max_abs, __float2half(127.0f)) * __float2half(clip_ratio);
+    }
+
+    __syncthreads();
+    at::Half scale = d_scale[row];
+
+    // 量化为 INT8 范围 [-128, 127]
+    for (int col = col_start; col < n; col += block_size) {
+        at::Half val = d_mat[row * n + col];
+        at::Half quantized = __hdiv(val, scale);
+        int8_t quantized_int = max(-128, min(127, __half2int_rn(quantized)));
+        d_out[row * n + col] = quantized_int;
+    }
+}
+
+void rowAbsMaxQuantize_i8(
+    at::Tensor d_mat, at::Tensor d_scale, at::Tensor d_out, float clip_ratio, int block_size) {
+
+    const at::Half* d_mat_ptr = d_mat.data_ptr<at::Half>();
+    at::Half* d_scale_ptr = d_scale.data_ptr<at::Half>();
+    int8_t* d_out_ptr = d_out.data_ptr<int8_t>();
+
+    int m = d_mat.size(0);
+    int n = d_mat.size(1);
+
+    dim3 grid(m, 1);
+    dim3 block(block_size, 1);
+    auto stream = at::cuda::getCurrentCUDAStream();
+
+    rowAbsMaxQuantizeKernel_i8<<<grid, block, block_size * sizeof(half), stream.stream()>>>(
+        d_mat_ptr, d_scale_ptr, d_out_ptr, m, n, clip_ratio, block_size);
+}
+
+__global__
+void sym_quantize_f16_i8_kernel(
+        const half *__restrict__ x,
+        const half *__restrict__ scale,
+        uint32_t rows,
+        uint32_t cols,
+        int8_t *__restrict__ q
+)
+{
+    uint32_t row = threadIdx.y + blockIdx.y * blockDim.y;
+    uint32_t col = threadIdx.x + blockIdx.x * blockDim.x;
+    
+    if (row >= rows || col >= cols)
+    {
+        return;
+    }
+    
+    uint32_t id = col + row * cols;
+    
+    // 对称量化到 INT8 范围 [-128, 127]
+    half data = __hdiv(x[id], scale[row]);
+    int qval = clamp(__half2int_rn(data), -128, 127);
+    
+    q[id] = static_cast<int8_t>(qval);
+}
+
+void sym_quant_i8_host(
+        const half *x,
+        const half *scale,
+        uint32_t rows,
+        uint32_t cols,
+        int8_t *q
+)
+{
+    dim3 block{std::min<uint32_t>(cols, 32), std::min<uint32_t>(rows, 16)};
+    dim3 grid{cdiv(cols, block.x), cdiv(rows, block.y)};
+    sym_quantize_f16_i8_kernel<<<grid, block>>>(x, scale, rows, cols, q);
+}
+
+
 __global__ void asym_quantize_and_pack_i4_kernel(
     const at::Half *x_k, const at::Half* x_v, 
     uint8_t *q_k, uint8_t *q_v, 
@@ -300,6 +401,36 @@ void asym_quantize_and_pack_i4(
         bsz, q_len, num_key_value_heads, head_dim);
     
     //cudaDeviceSynchronize(); // Ensure kernel has finished execution
+}
+
+__global__ void sym_dequantize_i8_f16_kernel(
+        const int8_t *__restrict__ q,
+        const half *__restrict__ scale,
+        uint32_t rows, uint32_t cols,
+        half *__restrict__ x)
+{
+    uint32_t row = threadIdx.y + blockIdx.y * blockDim.y;
+    uint32_t col = threadIdx.x + blockIdx.x * blockDim.x;
+
+    if (col >= cols || row >= rows)
+    {
+        return;
+    }
+
+    uint32_t id = col + row * cols;
+    half qElement = int_to_half(q[id]);
+    x[id] = scale[row] * qElement;
+}
+
+void sym_dequant_i8_host(const int8_t *q,
+                         const half *scale,
+                         uint32_t rows,
+                         uint32_t cols,
+                         half *x)
+{
+    dim3 block{std::min<uint32_t>(cols, 16), std::min<uint32_t>(rows, 16)};
+    dim3 grid{cdiv(cols, block.x), cdiv(rows, block.y)};
+    sym_dequantize_i8_f16_kernel<<<grid, block>>>(q, scale, rows, cols, x);
 }
 
 
