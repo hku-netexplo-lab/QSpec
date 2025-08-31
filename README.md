@@ -1,6 +1,6 @@
 ![alt text](figs/image-3.png)
-# QSpec Official Implementation v0.0 
-This is the official implementation of the QSpec: Speculative Decoding with Complementary Quantization Schemes. Leveraging nearly cost-free execution switching, QSpec drafts tokens with low-precision, fast activation-weight quantization, and verifies them with high-precision weight-only quantization, effectively combines the strengths of both quantization schemes.
+# QSpec Official Implementation v0.1
+This is the official implementation of the EMNLP 2025 Main Conference paper, [*QSpec: Speculative Decoding with Complementary Quantization Schemes*](https://arxiv.org/abs/2410.11305). Leveraging nearly cost-free execution switching, QSpec drafts tokens with low-precision, fast activation-weight quantization, and verifies them with high-precision weight-only quantization, effectively combines the strengths of both quantization schemes.
 
 ## Installation
 ### Prerequisites
