@@ -55,7 +55,7 @@ CUDA_DEVICE_ORDER=PCI_BUS_ID python demo.py --model PATH-TO-QSPEC-MODEL \
 ```    
 
 
-## Notes
+## Notes [Apr. 2025]
 - QSpec's kernels were written on CUDA 12.5. Inspired by the FlashAttention, FlashInfer, TorchAO, QuaRot and other projects, we have implemented the QSpec kernels in third-party libraries.
 - QSpec is a research project and is not yet ready for production use as we have not yet optimized the performance of the kernels to the fullest extent and have not yet integrated the kernels into VLLM accordingly. We use plugins to integrate QSpec into VLLM and slightly modify the VLLM codebase to support QSpec. We will release the full version of QSpec on VLLM in the near future.
 - **The first run of the QSpec model may be slow due to the auto-tuning process for linear layers on different/specific target GPUs. But the optimized kernels will be cached for future runs. It takes about 5 to 10 minutes in our machine**
